@@ -1,6 +1,6 @@
 module github.com/anicoll/winet-integration
 
-go 1.23
+go 1.23.1
 
 require (
 	github.com/eclipse/paho.mqtt.golang v1.5.0
@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	github.com/anicoll/evtwebsocket v0.0.0-20240919052951-a202db22d981 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.4 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect

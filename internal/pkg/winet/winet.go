@@ -9,10 +9,11 @@ import (
 	"log"
 	"net/url"
 
-	"github.com/rgamba/evtwebsocket"
-
+	"github.com/anicoll/evtwebsocket"
 	"github.com/anicoll/winet-integration/internal/pkg/config"
 )
+
+const EnglishLang string = "en_us"
 
 type service struct {
 	cfg        *config.WinetConfig
@@ -49,6 +50,8 @@ func (s *service) onconnect(c *evtwebsocket.Conn) {
 
 func (s *service) onMessage(data []byte, c *evtwebsocket.Conn) {
 	result := GenericResult{}
+
+	fmt.Println(string(data))
 	err := json.Unmarshal(data, &result)
 	s.sendIfErr(err)
 
@@ -61,7 +64,7 @@ func (s *service) onMessage(data []byte, c *evtwebsocket.Conn) {
 
 		// login now
 		data, err = json.Marshal(LoginRequest{
-			Lang:     "en_us",
+			Lang:     EnglishLang,
 			Service:  Login.String(),
 			Token:    s.token,
 			Password: s.cfg.Password,
@@ -73,10 +76,32 @@ func (s *service) onMessage(data []byte, c *evtwebsocket.Conn) {
 		})
 		s.sendIfErr(err)
 	case DeviceList:
+
+		deviceListRes := ParsedResult[DeviceListResponse]{}
+		err = json.Unmarshal(data, &deviceListRes)
+		s.sendIfErr(err)
+
 	case Local:
 	case Notice:
 	case Login:
-		fmt.Println("here", data)
+		loginRes := LoginResponse{}
+		err = json.Unmarshal(data, &loginRes)
+		s.sendIfErr(err)
+		s.token = loginRes.ResultData.Token
+
+		request, err := json.Marshal(DeviceListRequest{
+			IsCheckToken: "0",
+			Lang:         EnglishLang,
+			Service:      DeviceList.String(),
+			Token:        s.token,
+			Type:         "0",
+		})
+		s.sendIfErr(err)
+		err = c.Send(evtwebsocket.Msg{
+			Body: request,
+		})
+		s.sendIfErr(err)
+
 		// get some other stats
 	case Direct:
 	case Real, RealBattery:
@@ -101,9 +126,10 @@ func (s *service) reconnect() error {
 	log.Printf("connecting to %s", u.String())
 	s.token = "" // clear it out just incase.
 	s.conn = evtwebsocket.Conn{
-		OnConnected: s.onconnect,
-		OnMessage:   s.onMessage,
-		OnError:     s.onError,
+		OnConnected:    s.onconnect,
+		OnMessage:      s.onMessage,
+		OnError:        s.onError,
+		MaxMessageSize: 100000, // allow bigger messages
 	}
 	return s.conn.Dial(u.String(), "")
 

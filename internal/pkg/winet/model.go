@@ -9,6 +9,12 @@ type GenericResult struct {
 	} `json:"result_Data"`
 }
 
+type ParsedResult[T any] struct {
+	ResultCode    int    `json:"result_code"`
+	ResultMessage string `json:"result_msg"`
+	ResultData    T      `json:"result_Data"`
+}
+
 // ################################
 // WebSocketService.Local
 // LocalMessage returns Local Information of System
