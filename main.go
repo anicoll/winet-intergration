@@ -29,6 +29,11 @@ func main() {
 				EnvVars:  []string{"WINET_HOSTPORT"},
 				Required: true,
 			},
+			&cli.StringFlag{
+				Name:    "log-level",
+				EnvVars: []string{"LOG_LEVEL"},
+				Value:   "DEBUG",
+			},
 		},
 	}
 

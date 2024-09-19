@@ -1,19 +1,37 @@
 package winet
 
-type WebSocketService string
+type QueryStage string
 
-func (wss WebSocketService) String() string {
-	return string(wss)
+func (qs QueryStage) String() string {
+	return string(qs)
 }
 
 const (
-	Connect     WebSocketService = "connect"
-	Login       WebSocketService = "login"
-	DeviceList  WebSocketService = "devicelist"
-	Direct      WebSocketService = "direct"
-	Local       WebSocketService = "local"
-	Notice      WebSocketService = "notice"
-	Statistics  WebSocketService = "statistics"
-	Real        WebSocketService = "real"         /// time123456 (epoch)
-	RealBattery WebSocketService = "real_battery" /// time123456 (epoch)
+	Connect     QueryStage = "connect"
+	Login       QueryStage = "login"
+	DeviceList  QueryStage = "devicelist"
+	Direct      QueryStage = "direct"
+	Local       QueryStage = "local"
+	Notice      QueryStage = "notice"
+	Statistics  QueryStage = "statistics"
+	Real        QueryStage = "real"         /// time123456 (epoch)
+	RealBattery QueryStage = "real_battery" /// time123456 (epoch)
 )
+
+type DeviceType int
+
+const (
+	DeviceTypeInverter DeviceType = 35
+	DeviceTypeBattery  DeviceType = 44
+)
+
+var DeviceStages = map[DeviceType][]QueryStage{
+	DeviceTypeBattery: []QueryStage{
+		Real,
+	},
+	DeviceTypeInverter: []QueryStage{
+		Real,
+		RealBattery,
+		Direct,
+	},
+}

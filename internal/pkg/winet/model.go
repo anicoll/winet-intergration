@@ -5,7 +5,7 @@ type GenericResult struct {
 	ResultCode    int    `json:"result_code"`
 	ResultMessage string `json:"result_msg"`
 	ResultData    struct {
-		Service WebSocketService `json:"service"`
+		Service QueryStage `json:"service"`
 	} `json:"result_Data"`
 }
 
@@ -15,9 +15,16 @@ type ParsedResult[T any] struct {
 	ResultData    T      `json:"result_Data"`
 }
 
+type Request struct {
+	Lang    string `json:"lang"`
+	Service string `json:"service"`
+	Token   string `json:"token"`
+}
+
 // ################################
-// WebSocketService.Local
-// LocalMessage returns Local Information of System
+// QueryStage.Local
+// LocalReponse returns Local Information of System
+// LocalReponse to be merged with ParsedResult
 type LocalReponse struct {
 	Count   int           `json:"count"`
 	Service string        `json:"service"`
@@ -33,15 +40,14 @@ type GenericUnit struct {
 // ################################
 
 // ################################
-// WebSocketService.DeviceList
+// QueryStage.DeviceList
 type DeviceListRequest struct {
 	IsCheckToken string `json:"is_check_token"`
-	Lang         string `json:"lang"`
-	Service      string `json:"service"`
-	Token        string `json:"token"`
 	Type         string `json:"type"`
+	Request
 }
 
+// DeviceListResponse to be merged with ParsedResult
 type DeviceListResponse struct {
 	Count   int                `json:"count"`
 	Service string             `json:"service"`
@@ -50,9 +56,9 @@ type DeviceListResponse struct {
 
 type DeviceListObject struct {
 	ID              int        `json:"id"`
-	DevID           int        `json:"dev_id"`
+	DeviceID        int        `json:"dev_id"`
 	DevCode         int        `json:"dev_code"`
-	DevType         int        `json:"dev_type"`
+	DevType         DeviceType `json:"dev_type"`
 	DevProtocol     int        `json:"dev_protocol"`
 	InverterType    int        `json:"inv_type"`
 	DevSN           string     `json:"dev_sn"`
@@ -70,15 +76,14 @@ type DeviceListObject struct {
 // ################################
 
 // ################################
-// WebSocketService.Real
+// QueryStage.Real
 type RealRequest struct {
 	DeviceID string `json:"dev_id"`
-	Lang     string `json:"lang"`
-	Service  string `json:"service"`
-	Token    string `json:"token"`
 	Time     string `json:"time123456"`
+	Request
 }
 
+// RealResponse to be merged with ParsedResult
 type RealResponse struct {
 	Count   int           `json:"count"`
 	Service int           `json:"service"`
@@ -88,34 +93,18 @@ type RealResponse struct {
 // ################################
 
 // ################################
-// WebSocketService.Login
+// QueryStage.Login
 type LoginRequest struct {
 	Password string `json:"passwd"`
-	Lang     string `json:"lang"`
-	Service  string `json:"service"`
-	Token    string `json:"token"`
 	Username string `json:"username"`
+	Request
 }
 
+// LoginResponse to be merged with ParsedResult
 type LoginResponse struct {
-	ResultCode    int    `json:"result_code"`
-	ResultMessage string `json:"result_msg"`
-	ResultData    struct {
-		Service           string `json:"service"`
-		Token             string `json:"token"`
-		Uid               int    `json:"uid"`
-		TipsDisable       int    `json:"tips_disable"`
-		VirginFlag        int    `json:"virgin_flag"`
-		IsFirstLogin      int    `json:"isFirstLogin"`
-		ForceModifyPasswd int    `json:"forceModifyPasswd"`
-	} `json:"result_data"`
-}
-
-type LoginObject struct {
 	Service           string `json:"service"`
 	Token             string `json:"token"`
 	Uid               int    `json:"uid"`
-	Role              int    `json:"role"`
 	TipsDisable       int    `json:"tips_disable"`
 	VirginFlag        int    `json:"virgin_flag"`
 	IsFirstLogin      int    `json:"isFirstLogin"`
@@ -125,11 +114,9 @@ type LoginObject struct {
 // ################################
 
 // ################################
-// WebSocketService.Connect
+// QueryStage.Connect
 type ConnectRequest struct {
-	Lang    string `json:"lang"`
-	Service string `json:"service"`
-	Token   string `json:"token"`
+	Request
 }
 
 type ConnectResponse LoginResponse
