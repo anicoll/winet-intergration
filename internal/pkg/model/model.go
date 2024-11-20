@@ -1,4 +1,4 @@
-package winet
+package model
 
 // Use this to know which service to respond to.
 type GenericResult struct {
@@ -32,9 +32,9 @@ type LocalReponse struct {
 }
 
 type GenericUnit struct {
-	DataName  string `json:"data_name"`
-	DataValue string `json:"data_value"`
-	DataUnit  string `json:"data_unit"`
+	DataName  string      `json:"data_name"`
+	DataValue string      `json:"data_value"`
+	DataUnit  NumericUnit `json:"data_unit"`
 }
 
 // ################################
@@ -86,7 +86,7 @@ type RealRequest struct {
 // RealResponse to be merged with ParsedResult
 type RealResponse struct {
 	Count   int           `json:"count"`
-	Service int           `json:"service"`
+	Service string        `json:"service"`
 	List    []GenericUnit `json:"list"`
 }
 
@@ -109,6 +109,21 @@ type LoginResponse struct {
 	VirginFlag        int    `json:"virgin_flag"`
 	IsFirstLogin      int    `json:"isFirstLogin"`
 	ForceModifyPasswd int    `json:"forceModifyPasswd"`
+}
+
+// LoginResponse to be merged with ParsedResult
+type DirectResponse struct {
+	Count   int          `json:"count"`
+	Service string       `json:"service"`
+	List    []DirectUnit `json:"list"`
+}
+
+type DirectUnit struct {
+	Name        string      `json:"name"`
+	Voltage     string      `json:"voltage"`
+	VoltageUnit NumericUnit `json:"voltage_unit"`
+	Current     string      `json:"current"`
+	CurrentUnit NumericUnit `json:"current_unit"`
 }
 
 // ################################

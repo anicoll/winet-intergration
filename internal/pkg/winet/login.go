@@ -4,21 +4,16 @@ import (
 	"encoding/json"
 
 	ws "github.com/anicoll/evtwebsocket"
+	"github.com/anicoll/winet-integration/internal/pkg/model"
 	"go.uber.org/zap"
 )
 
-// handleLoginMessage consumes Login response and calls DeviceList.
-func (s *service) handleLoginMessage(data []byte, c ws.Connection) {
-	loginRes := ParsedResult[LoginResponse]{}
-	err := json.Unmarshal(data, &loginRes)
-	s.sendIfErr(err)
-	s.token = loginRes.ResultData.Token
-
-	request, err := json.Marshal(DeviceListRequest{
+func (s *service) sendDeviceListRequest(c ws.Connection) {
+	request, err := json.Marshal(model.DeviceListRequest{
 		IsCheckToken: "0",
-		Request: Request{
+		Request: model.Request{
 			Lang:    EnglishLang,
-			Service: DeviceList.String(),
+			Service: model.DeviceList.String(),
 			Token:   s.token,
 		},
 		Type: "0",
@@ -29,5 +24,14 @@ func (s *service) handleLoginMessage(data []byte, c ws.Connection) {
 	})
 
 	s.sendIfErr(err)
-	s.logger.Debug("sent msg", zap.String("query_stage", DeviceList.String()))
+	s.logger.Debug("sent msg", zap.String("query_stage", model.DeviceList.String()))
+}
+
+// handleLoginMessage consumes Login response and calls DeviceList.
+func (s *service) handleLoginMessage(data []byte, c ws.Connection) {
+	loginRes := model.ParsedResult[model.LoginResponse]{}
+	err := json.Unmarshal(data, &loginRes)
+	s.sendIfErr(err)
+	s.token = loginRes.ResultData.Token
+	s.sendDeviceListRequest(c)
 }

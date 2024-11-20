@@ -2,17 +2,18 @@ package winet
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"net/http"
 	"strings"
 )
 
 func (s *service) getProperties(ctx context.Context) error {
-	hostport := strings.Split(s.cfg.HostPort, ":")
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+hostport[0]+"/i18n/en_US.properties", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+s.cfg.Host+"/i18n/en_US.properties", nil)
 	if err != nil {
 		return err
 	}
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err

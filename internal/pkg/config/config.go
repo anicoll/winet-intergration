@@ -2,11 +2,13 @@ package config
 
 type Config struct {
 	WinetCfg *WinetConfig
+	MqttCfg  *WinetConfig
 	LogLevel string
 }
 
 type WinetConfig struct {
-	HostPort string
+	Host     string
 	Username string
 	Password string
+	Ssl      bool
 }

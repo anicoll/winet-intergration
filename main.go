@@ -24,9 +24,14 @@ func main() {
 				EnvVars: []string{"WINET_USERNAME"},
 				Value:   "admin",
 			},
+			&cli.BoolFlag{
+				Name:    "winet-ssl",
+				EnvVars: []string{"WINET_SSL"},
+				Value:   false,
+			},
 			&cli.StringFlag{
-				Name:     "winet-hostport",
-				EnvVars:  []string{"WINET_HOSTPORT"},
+				Name:     "winet-host",
+				EnvVars:  []string{"WINET_HOST"},
 				Required: true,
 			},
 			&cli.StringFlag{
@@ -40,5 +45,4 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
-
 }

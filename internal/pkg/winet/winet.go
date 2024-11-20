@@ -4,33 +4,43 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/url"
 
 	ws "github.com/anicoll/evtwebsocket"
 	"github.com/anicoll/winet-integration/internal/pkg/config"
+	"github.com/anicoll/winet-integration/internal/pkg/model"
 	"go.uber.org/zap"
 )
 
 const EnglishLang string = "en_us"
 
-type service struct {
-	cfg        *config.WinetConfig
-	properties map[string]string
-	conn       ws.Connection
-	errChan    chan error
-	token      string
-	logger     *zap.Logger
-	storedData []byte
+type publisher interface {
+	PublishData(deviceStatusMap map[model.Device][]model.DeviceStatus) error
+	RegisterDevice(device *model.Device) error
 }
 
-func New(cfg *config.WinetConfig, errChan chan error) *service {
+type service struct {
+	cfg           *config.WinetConfig
+	properties    map[string]string
+	conn          ws.Connection
+	errChan       chan error
+	token         string
+	logger        *zap.Logger
+	storedData    []byte
+	publisher     publisher
+	currentDevice *model.Device
+	processed     chan struct{} // used to communicate when messages are processed.
+}
+
+func New(cfg *config.WinetConfig, publisher publisher, errChan chan error) *service {
 	return &service{
 		cfg:        cfg,
 		errChan:    errChan,
 		logger:     zap.L(), // returns the global logger.
 		storedData: []byte{},
+		publisher:  publisher,
+		processed:  make(chan struct{}),
 	}
 }
 
@@ -40,27 +50,28 @@ func (s *service) sendIfErr(err error) {
 		s.errChan <- err
 	}
 }
+
 func (s *service) onconnect(c ws.Connection) {
 	s.logger.Debug("onconnect ws received")
-	data, err := json.Marshal(ConnectRequest{
-		Request: Request{
+	data, err := json.Marshal(model.ConnectRequest{
+		Request: model.Request{
 			Lang:    "en_us",
-			Service: Connect.String(),
+			Service: model.Connect.String(),
 			Token:   s.token,
 		},
 	})
 	s.sendIfErr(err)
-	s.logger.Debug("sending msg", zap.ByteString("request", data), zap.String("query_stage", Connect.String()))
+	s.logger.Debug("sending msg", zap.ByteString("request", data), zap.String("query_stage", model.Connect.String()))
 	err = c.Send(ws.Msg{
 		Body: data,
 	})
 	s.sendIfErr(err)
-	s.logger.Debug("msg sent", zap.String("query_stage", Connect.String()))
+	s.logger.Debug("msg sent", zap.String("query_stage", model.Connect.String()))
 }
 
 // returns bool if is json.SyntaxError
-func (s *service) unmarshal(data []byte) (*GenericResult, bool) {
-	result := GenericResult{}
+func (s *service) unmarshal(data []byte) (*model.GenericResult, bool) {
+	result := model.GenericResult{}
 
 	if err := json.Unmarshal(data, &result); err != nil {
 		var serr *json.SyntaxError
@@ -86,25 +97,25 @@ func (s *service) onMessage(data []byte, c ws.Connection) {
 		s.storedData = []byte{}
 	}
 
-	s.logger.Debug("received message", zap.String("result", result.ResultMessage), zap.String("query_stage", result.ResultData.Service.String()))
+	s.logger.Info("received message", zap.String("result", result.ResultMessage), zap.String("query_stage", result.ResultData.Service.String()))
 	if result.ResultMessage != "success" {
 		s.reconnect()
 	}
 
 	switch result.ResultData.Service {
-	case Connect:
+	case model.Connect:
 		s.handleConnectMessage(data, c)
-	case DeviceList:
-		s.handleDeviceListMessage(data, c)
-	case Local:
-	case Notice:
-	case Login:
+	case model.DeviceList:
+		go s.handleDeviceListMessage(data, c)
+	case model.Local:
+	case model.Notice:
+	case model.Login:
 		s.handleLoginMessage(data, c)
-	case Direct:
-		fmt.Println("HERE", string(data))
-	case Real, RealBattery:
-		fmt.Println("HERE", string(data))
-	case Statistics:
+	case model.Direct:
+		go s.handleDirectMessage(data)
+	case model.Real, model.RealBattery:
+		go s.handleRealMessage(data)
+	case model.Statistics:
 	default:
 		s.reconnect()
 	}
@@ -118,7 +129,13 @@ func (s *service) onError(err error) {
 }
 
 func (s *service) reconnect() error {
-	u := url.URL{Scheme: "ws", Host: s.cfg.HostPort, Path: "/ws/home/overview"}
+	var u url.URL
+	if s.cfg.Ssl {
+		u = url.URL{Scheme: "wss", Host: s.cfg.Host + ":443", Path: "/ws/home/overview"}
+	} else {
+		u = url.URL{Scheme: "ws", Host: s.cfg.Host + ":8082", Path: "/ws/home/overview"}
+	}
+
 	s.logger.Debug("connecting to", zap.String("url", u.String()))
 
 	s.token = "" // clear it out just incase.
@@ -127,6 +144,7 @@ func (s *service) reconnect() error {
 		ws.OnConnected(s.onconnect),
 		ws.OnMessage(s.onMessage),
 		ws.OnError(s.onError),
+		ws.InsecureSkipVerify(),
 		ws.WithMaxMessageSize(100000),
 		ws.WithPingIntervalSec(4),
 		ws.WithPingMsg([]byte("ping")),
@@ -146,5 +164,4 @@ func (s *service) Connect(ctx context.Context) error {
 		return err
 	}
 	return s.reconnect()
-
 }
