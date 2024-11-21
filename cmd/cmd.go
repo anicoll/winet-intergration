@@ -49,7 +49,9 @@ func run(ctx context.Context, cfg *config.Config) error {
 	logCfg.ErrorOutputPaths = []string{"stdout"}
 	logCfg.Sampling = nil
 	logger := zap.Must(logCfg.Build(zap.AddCaller(), zap.AddStacktrace(zap.ErrorLevel)))
-	defer logger.Sync() // flushes buffer, if any
+	defer func() {
+		_ = logger.Sync() // flushes buffer, if any.
+	}()
 	zap.ReplaceGlobals(logger)
 	mqttOpts := paho_mqtt.NewClientOptions()
 	mqttOpts.SetPassword(cfg.MqttCfg.Password)
@@ -86,10 +88,14 @@ func run(ctx context.Context, cfg *config.Config) error {
 
 	eg.Go(func() error {
 		// handle any async errors from service
-		for {
-			err := <-errorChan
+		select {
+		case err := <-errorChan:
 			logger.Error(err.Error())
+		case <-ctx.Done():
+			logger.Info("context done")
+			return nil
 		}
+		return nil
 	})
 
 	return eg.Wait()
