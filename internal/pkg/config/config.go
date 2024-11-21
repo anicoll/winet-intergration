@@ -7,8 +7,9 @@ type Config struct {
 }
 
 type WinetConfig struct {
-	Host     string
-	Username string
-	Password string
-	Ssl      bool
+	Host      string
+	Username  string
+	Password  string
+	Ssl       bool
+	PollTimer int
 }

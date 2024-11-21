@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"time"
 
 	"github.com/anicoll/winet-integration/internal/pkg/config"
 	"github.com/anicoll/winet-integration/internal/pkg/mqtt"
@@ -16,10 +15,11 @@ import (
 func WinetCommand(ctx *cli.Context) error {
 	cfg := &config.Config{
 		WinetCfg: &config.WinetConfig{
-			Password: ctx.String("winet-password"),
-			Username: ctx.String("winet-username"),
-			Host:     ctx.String("winet-host"),
-			Ssl:      ctx.Bool("winet-ssl"),
+			Password:  ctx.String("winet-password"),
+			Username:  ctx.String("winet-username"),
+			Host:      ctx.String("winet-host"),
+			Ssl:       ctx.Bool("winet-ssl"),
+			PollTimer: ctx.Int("poll-timer"),
 		},
 		MqttCfg: &config.WinetConfig{
 			Host: "localhost:9001",
@@ -45,7 +45,9 @@ func run(ctx context.Context, cfg *config.Config) error {
 	logCfg.ErrorOutputPaths = []string{"stdout"}
 	logCfg.Sampling = nil
 	logger := zap.Must(logCfg.Build(zap.AddCaller(), zap.AddStacktrace(zap.ErrorLevel)))
-	defer logger.Sync() // flushes buffer, if any
+	defer func() {
+		_ = logger.Sync() // flushes buffer, if any.
+	}()
 	zap.ReplaceGlobals(logger)
 	mqttOpts := paho_mqtt.NewClientOptions()
 	mqttOpts.SetPassword(cfg.MqttCfg.Password)
@@ -66,13 +68,13 @@ func run(ctx context.Context, cfg *config.Config) error {
 
 	eg.Go(func() error {
 		// handle any async errors from service
-		for {
-			err := <-errorChan
+		select {
+		case err := <-errorChan:
 			logger.Error(err.Error())
+		case <-ctx.Done():
+			logger.Info("context done")
+			return nil
 		}
-	})
-	eg.Go(func() error {
-		time.Sleep(time.Hour)
 		return nil
 	})
 
