@@ -3,6 +3,7 @@ package winet
 import (
 	"encoding/json"
 	"strconv"
+	"strings"
 
 	"github.com/gosimple/slug"
 
@@ -10,7 +11,7 @@ import (
 )
 
 func (s *service) handleDirectMessage(data []byte) {
-	res := model.ParsedResult[model.DirectResponse]{}
+	res := model.ParsedResult[model.GenericReponse[model.DirectUnit]]{}
 	err := json.Unmarshal(data, &res)
 	s.sendIfErr(err)
 	if s.currentDevice == nil {
@@ -32,7 +33,7 @@ func (s *service) handleDirectMessage(data []byte) {
 
 		dataPointV := model.DeviceStatus{
 			Name:  nameV,
-			Slug:  slug.Make(nameV),
+			Slug:  strings.Replace(slug.Make(nameV), "-", "_", -1),
 			Value: valueV,
 			Unit:  string(data.VoltageUnit),
 			Dirty: true,
@@ -46,7 +47,7 @@ func (s *service) handleDirectMessage(data []byte) {
 
 		dataPointA := model.DeviceStatus{
 			Name:  nameA,
-			Slug:  slug.Make(nameA),
+			Slug:  strings.Replace(slug.Make(nameA), "-", "_", -1),
 			Value: valueA,
 			Unit:  string(data.CurrentUnit),
 			Dirty: true,
@@ -69,21 +70,13 @@ func (s *service) handleDirectMessage(data []byte) {
 
 		dataPointW := model.DeviceStatus{
 			Name:  nameW,
-			Slug:  slug.Make(nameW),
+			Slug:  strings.Replace(slug.Make(nameW), "-", "_", -1),
 			Value: valueW,
 			Unit:  string(data.CurrentUnit),
 			Dirty: true,
 		}
 		datapoints = append(datapoints, dataPointW)
-		// mpptTotalW += dataPointW.Value
 	}
-	//  dataPointTotalW:= model.DeviceStatus{
-	// 	Name: "MPPT Total Power",
-	// 	Slug: "mppt_total_power",
-	// 	Value: Math.round(mpptTotalW * 100) / 100,
-	// 	Unit: string(model.NumericUnitWatt),
-	// 	Dirty: true,
-	// };
 
 	datapointsToPublish[*s.currentDevice] = datapoints
 	s.processed <- struct{}{} // indicate we are done.

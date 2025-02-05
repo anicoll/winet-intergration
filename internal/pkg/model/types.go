@@ -14,8 +14,9 @@ const (
 	Local       QueryStage = "local"
 	Notice      QueryStage = "notice"
 	Statistics  QueryStage = "statistics"
-	Real        QueryStage = "real"         /// time123456 (epoch)
-	RealBattery QueryStage = "real_battery" /// time123456 (epoch)
+	Real        QueryStage = "real"
+	RealBattery QueryStage = "real_battery"
+	Param       QueryStage = "param"
 )
 
 type NumericUnit string

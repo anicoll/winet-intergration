@@ -12,7 +12,7 @@ import (
 )
 
 func (s *service) handleDeviceListMessage(data []byte, c ws.Connection) {
-	res := model.ParsedResult[model.DeviceListResponse]{}
+	res := model.ParsedResult[model.GenericReponse[model.DeviceListObject]]{}
 	err := json.Unmarshal(data, &res)
 	s.sendIfErr(err)
 
@@ -20,8 +20,7 @@ func (s *service) handleDeviceListMessage(data []byte, c ws.Connection) {
 		if len(model.DeviceStages[device.DevType]) == 0 {
 			continue
 		}
-		// regx:=regexp.MustCompile("[^a-zA-Z0-9]")
-		// regx.ReplaceAll()
+
 		s.currentDevice = &model.Device{
 			ID:           strconv.Itoa(device.DeviceID),
 			Model:        device.DevModel,
@@ -54,9 +53,6 @@ func (s *service) handleDeviceListMessage(data []byte, c ws.Connection) {
 	s.sendDeviceListRequest(c)
 }
 
-func (s *service) waiter() {
-	select {
-	case <-s.processed:
-		return
-	}
+func (s *service) waiter() any {
+	return <-s.processed
 }
