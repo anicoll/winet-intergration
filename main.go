@@ -29,6 +29,11 @@ func main() {
 				EnvVars: []string{"WINET_SSL"},
 				Value:   false,
 			},
+			&cli.DurationFlag{
+				Name:    "poll-interval",
+				EnvVars: []string{"POLL_INTERVAL"},
+				Value:   10,
+			},
 			&cli.StringFlag{
 				Name:     "winet-host",
 				EnvVars:  []string{"WINET_HOST"},
@@ -37,7 +42,7 @@ func main() {
 			&cli.StringFlag{
 				Name:    "log-level",
 				EnvVars: []string{"LOG_LEVEL"},
-				Value:   "DEBUG",
+				Value:   "INFO",
 			},
 		},
 	}

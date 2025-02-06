@@ -19,10 +19,11 @@ import (
 func WinetCommand(ctx *cli.Context) error {
 	cfg := &config.Config{
 		WinetCfg: &config.WinetConfig{
-			Password: ctx.String("winet-password"),
-			Username: ctx.String("winet-username"),
-			Host:     ctx.String("winet-host"),
-			Ssl:      ctx.Bool("winet-ssl"),
+			Password:     ctx.String("winet-password"),
+			Username:     ctx.String("winet-username"),
+			Host:         ctx.String("winet-host"),
+			Ssl:          ctx.Bool("winet-ssl"),
+			PollInterval: ctx.Duration("poll-interval"),
 		},
 		MqttCfg: &config.WinetConfig{
 			Host: "localhost:1883",

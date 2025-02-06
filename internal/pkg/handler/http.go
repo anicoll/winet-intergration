@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 
@@ -11,6 +12,11 @@ import (
 
 type winetService interface {
 	SendSelfConsumptionCommand() (bool, error)
+	SetFeedInLimitation(feedinLimited bool) (bool, error)
+	// like 6.6
+	SendDischargeCommand(dischargePower string) (bool, error)
+	// like 6.6
+	SendChargeCommand(chargePower string) (bool, error)
 }
 
 // Battery handles requests for charging and discharging.
@@ -26,7 +32,11 @@ func Battery(winet winetService) func(w http.ResponseWriter, r *http.Request) {
 			handleError(w, err)
 			return
 		}
-		handleBatterRequest(r.Context(), winet, batteryRequest)
+		if err := handleBatterRequest(r.Context(), winet, batteryRequest); err != nil {
+			handleError(w, err)
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("success"))
 	}
 }
 
@@ -45,14 +55,28 @@ func handleBatterRequest(_ context.Context, winet winetService, updateBatteryReq
 		if err != nil {
 			return err
 		}
-		_ = success
-		// change to self consumption
+		if !success {
+			return errors.New("failed to send discharge command")
+		}
 	case ChargeState:
-		logger.Info("switching battery to", zap.String("state", updateBatteryReq.State.String()), zap.Int("power", updateBatteryReq.Power))
+		logger.Info("switching battery to", zap.String("state", updateBatteryReq.State.String()), zap.String("power", updateBatteryReq.Power))
+		success, err := winet.SendChargeCommand("6.6")
+		if err != nil {
+			return err
+		}
+		if !success {
+			return errors.New("failed to send discharge command")
+		}
 		// handle Charge power request
 	case DischargeState:
-		logger.Info("switching battery to", zap.String("state", updateBatteryReq.State.String()), zap.Int("power", updateBatteryReq.Power))
-		// handle disCharge power request
+		logger.Info("switching battery to", zap.String("state", updateBatteryReq.State.String()), zap.String("power", updateBatteryReq.Power))
+		success, err := winet.SendDischargeCommand(updateBatteryReq.Power)
+		if err != nil {
+			return err
+		}
+		if !success {
+			return errors.New("failed to send discharge command")
+		}
 	}
 	return nil
 }
@@ -70,7 +94,11 @@ func Inverter(winet winetService) func(w http.ResponseWriter, r *http.Request) {
 			handleError(w, err)
 			return
 		}
-		handleInverterRequest(r.Context(), winet, inverterRequest)
+		if err := handleInverterRequest(r.Context(), winet, inverterRequest); err != nil {
+			handleError(w, err)
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("success"))
 	}
 }
 
@@ -82,6 +110,21 @@ func handleInverterRequest(_ context.Context, winet winetService, inverterReques
 	}
 
 	logger.Info("limit feed in switched", zap.Bool("limit_feed_in", *inverterRequest.LimitFeedIn))
-
+	if *inverterRequest.LimitFeedIn {
+		success, err := winet.SetFeedInLimitation(true)
+		if err != nil {
+			return err
+		}
+		if !success {
+			return errors.New("failed to set feedin limitation")
+		}
+	}
+	success, err := winet.SetFeedInLimitation(false)
+	if err != nil {
+		return err
+	}
+	if !success {
+		return errors.New("failed to set feedin limitation")
+	}
 	return nil
 }

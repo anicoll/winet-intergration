@@ -24,7 +24,7 @@ const (
 
 type UpdateBatteryRequest struct {
 	State BatteryState `json:"state"` // BatteryState enum.
-	Power int          `json:"power"` // In units of 100, so 6.6KW would be 660
+	Power string       `json:"power"` // like 6.6 for 6.6kw
 }
 
 type UpdateInverterRequest struct {
