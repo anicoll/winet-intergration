@@ -1,10 +1,11 @@
 module github.com/anicoll/winet-integration
 
-go 1.23.1
+go 1.23.6
 
 require (
 	github.com/anicoll/evtwebsocket v0.1.0
 	github.com/eclipse/paho.mqtt.golang v1.5.0
+	github.com/gorilla/mux v1.8.1
 	github.com/gosimple/slug v1.15.0
 	github.com/urfave/cli/v2 v2.27.5
 	go.uber.org/zap v1.27.0

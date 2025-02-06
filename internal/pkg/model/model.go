@@ -23,12 +23,11 @@ type Request struct {
 
 // ################################
 // QueryStage.Local
-// LocalReponse returns Local Information of System
-// LocalReponse to be merged with ParsedResult
-type LocalReponse struct {
-	Count   int           `json:"count"`
-	Service string        `json:"service"`
-	List    []GenericUnit `json:"list"`
+
+type GenericReponse[T any] struct {
+	Count   int    `json:"count"`
+	Service string `json:"service"`
+	List    []T    `json:"list"`
 }
 
 type GenericUnit struct {
@@ -48,11 +47,6 @@ type DeviceListRequest struct {
 }
 
 // DeviceListResponse to be merged with ParsedResult
-type DeviceListResponse struct {
-	Count   int                `json:"count"`
-	Service string             `json:"service"`
-	List    []DeviceListObject `json:"list"`
-}
 
 type DeviceListObject struct {
 	ID              int        `json:"id"`
@@ -83,13 +77,6 @@ type RealRequest struct {
 	Request
 }
 
-// RealResponse to be merged with ParsedResult
-type RealResponse struct {
-	Count   int           `json:"count"`
-	Service string        `json:"service"`
-	List    []GenericUnit `json:"list"`
-}
-
 // ################################
 
 // ################################
@@ -111,13 +98,6 @@ type LoginResponse struct {
 	ForceModifyPasswd int    `json:"forceModifyPasswd"`
 }
 
-// LoginResponse to be merged with ParsedResult
-type DirectResponse struct {
-	Count   int          `json:"count"`
-	Service string       `json:"service"`
-	List    []DirectUnit `json:"list"`
-}
-
 type DirectUnit struct {
 	Name        string      `json:"name"`
 	Voltage     string      `json:"voltage"`
@@ -137,3 +117,35 @@ type ConnectRequest struct {
 type ConnectResponse LoginResponse
 
 // ################################
+
+// Inverter Energy Management Request
+
+type InverterUpdateRequest struct {
+	Request
+	Time           string                 `json:"time123456"`
+	ParkSerial     string                 `json:"park_serial"` // same as timestamp
+	DevCode        int                    `json:"dev_code"`
+	DevType        DeviceType             `json:"dev_type"`
+	DevIDArray     []string               `json:"devid_array"`
+	Type           string                 `json:"type"`
+	Count          string                 `json:"count"`
+	CurrentPackNum int                    `json:"current_pack_num"`
+	PackNumTotal   int                    `json:"pack_num_total"`
+	List           []InverterParamRequest `json:"list"`
+}
+
+type InverterParamRequest struct {
+	Accuracy   int    `json:"accuracy"`
+	ParamAddr  int    `json:"param_addr"`
+	ParamID    int    `json:"param_id"`
+	ParamType  int    `json:"param_type"`
+	ParamValue string `json:"param_value"`
+	ParamName  string `json:"param_name"`
+}
+
+type InverterParamResponse struct {
+	Accuracy  int    `json:"result"`
+	ParamAddr int    `json:"param_pid"`
+	ParamID   int    `json:"param_id"`
+	ParamName string `json:"param_name"`
+}

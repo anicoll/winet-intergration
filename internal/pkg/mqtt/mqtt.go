@@ -27,11 +27,11 @@ func New(client paho_mqtt.Client) *service {
 func (s *service) Connect() error {
 	token := s.client.Connect()
 	res := token.WaitTimeout(time.Second * 5)
-	if res {
-		return nil
-	}
 	if err := token.Error(); err != nil {
 		return err
+	}
+	if res {
+		return nil
 	}
 	return errors.New("unable to connect in time")
 }
@@ -42,30 +42,41 @@ func (s *service) PublishData(deviceStatusMap map[model.Device][]model.DeviceSta
 			if err := s.RegisterDevice(&device); err != nil {
 				return err
 			}
-			value := new(big.Rat)
-			value, _ = value.SetString(*status.Value)
-			if status.Unit == "kWp" {
-				status.Unit = "kW"
+			isTextSensor := model.TextSensors.HasSlug(status.Slug)
+			val := ""
+			if (!isTextSensor && status.Value == nil) || *status.Value == "--" {
+				status.Value = func() *string {
+					s := "0.00"
+					return &s
+				}()
 			}
-			if status.Unit == "℃" {
-				status.Unit = "°C"
-			}
-			if status.Unit == "kvar" {
-				status.Unit = "var"
-				value = value.Mul(value, new(big.Rat).SetInt64(1000))
-			}
-			if status.Unit == "kVA" {
-				status.Unit = "VA"
-				value = value.Mul(value, new(big.Rat).SetInt64(1000))
+			if !isTextSensor {
+				value := new(big.Rat)
+				value, _ = value.SetString(*status.Value)
+				if status.Unit == "kWp" {
+					status.Unit = "kW"
+				}
+				if status.Unit == "℃" {
+					status.Unit = "°C"
+				}
+				if status.Unit == "kvar" {
+					status.Unit = "var"
+					value = value.Mul(value, new(big.Rat).SetInt64(1000))
+				}
+				if status.Unit == "kVA" {
+					status.Unit = "VA"
+					value = value.Mul(value, new(big.Rat).SetInt64(1000))
+				}
+				val = value.FloatString(4)
 			}
 
 			slugIdentifier := fmt.Sprintf("%s_%s", device.Model, device.SerialNumber)
 			topic := fmt.Sprintf("homeassistant/sensor/%s/%s/state", slugIdentifier, status.Slug)
 
 			payload := map[string]string{
-				"value": value.FloatString(4),
+				"value": val,
 			}
-			if !model.TextSensors.HasSlug(status.Slug) {
+			if !isTextSensor {
 				payload["unit_of_measurement"] = status.Unit
 			}
 			data, err := json.Marshal(payload)
@@ -75,7 +86,7 @@ func (s *service) PublishData(deviceStatusMap map[model.Device][]model.DeviceSta
 			token := s.client.Publish(topic, 0, false, data)
 			res := token.WaitTimeout(time.Second * 10)
 			if res {
-				return nil
+				continue
 			}
 			if err := token.Error(); err != nil {
 				return err
@@ -102,13 +113,13 @@ func (s *service) RegisterDevice(device *model.Device) error {
 		return err
 	}
 	token := s.client.Publish(topic, 1, true, payload)
-	if res := token.WaitTimeout(time.Second * 5); res {
-		return nil
-	}
 	if err := token.Error(); err != nil {
 		return err
 	}
-	s.configuredDevices[device.ID] = struct{}{}
+	if res := token.WaitTimeout(time.Second * 5); res {
+		s.configuredDevices[device.ID] = struct{}{}
+		return nil
+	}
 	return nil
 }
 

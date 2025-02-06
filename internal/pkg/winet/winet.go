@@ -30,7 +30,7 @@ type service struct {
 	storedData    []byte
 	publisher     publisher
 	currentDevice *model.Device
-	processed     chan struct{} // used to communicate when messages are processed.
+	processed     chan any // used to communicate when messages are processed.
 }
 
 func New(cfg *config.WinetConfig, publisher publisher, errChan chan error) *service {
@@ -40,7 +40,7 @@ func New(cfg *config.WinetConfig, publisher publisher, errChan chan error) *serv
 		logger:     zap.L(), // returns the global logger.
 		storedData: []byte{},
 		publisher:  publisher,
-		processed:  make(chan struct{}),
+		processed:  make(chan any),
 	}
 }
 
@@ -107,6 +107,8 @@ func (s *service) onMessage(data []byte, c ws.Connection) {
 		s.handleConnectMessage(data, c)
 	case model.DeviceList:
 		go s.handleDeviceListMessage(data, c)
+	case model.Param:
+		go s.handleParamMessage(data, c)
 	case model.Local:
 	case model.Notice:
 	case model.Login:

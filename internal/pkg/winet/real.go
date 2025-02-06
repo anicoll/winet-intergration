@@ -11,13 +11,12 @@ import (
 )
 
 func (s *service) handleRealMessage(data []byte) {
-	res := model.ParsedResult[model.RealResponse]{}
+	res := model.ParsedResult[model.GenericReponse[model.GenericUnit]]{}
 	err := json.Unmarshal(data, &res)
 	s.sendIfErr(err)
 	if s.currentDevice == nil {
 		return
 	}
-
 	datapointsToPublish := make(map[model.Device][]model.DeviceStatus)
 	datapoints := []model.DeviceStatus{}
 	for _, device := range res.ResultData.List {
@@ -27,7 +26,7 @@ func (s *service) handleRealMessage(data []byte) {
 		}
 		dataPoint := model.DeviceStatus{
 			Name:  name,
-			Slug:  slug.Make(name),
+			Slug:  strings.Replace(slug.Make(name), "-", "_", -1),
 			Unit:  string(device.DataUnit),
 			Value: s.calculateValue(device),
 			Dirty: true,

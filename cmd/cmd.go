@@ -2,12 +2,15 @@ package cmd
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"github.com/anicoll/winet-integration/internal/pkg/config"
+	"github.com/anicoll/winet-integration/internal/pkg/handler"
 	"github.com/anicoll/winet-integration/internal/pkg/mqtt"
 	"github.com/anicoll/winet-integration/internal/pkg/winet"
 	paho_mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/gorilla/mux"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -16,13 +19,14 @@ import (
 func WinetCommand(ctx *cli.Context) error {
 	cfg := &config.Config{
 		WinetCfg: &config.WinetConfig{
-			Password: ctx.String("winet-password"),
-			Username: ctx.String("winet-username"),
-			Host:     ctx.String("winet-host"),
-			Ssl:      ctx.Bool("winet-ssl"),
+			Password:     ctx.String("winet-password"),
+			Username:     ctx.String("winet-username"),
+			Host:         ctx.String("winet-host"),
+			Ssl:          ctx.Bool("winet-ssl"),
+			PollInterval: ctx.Duration("poll-interval"),
 		},
 		MqttCfg: &config.WinetConfig{
-			Host: "localhost:9001",
+			Host: "localhost:1883",
 		},
 		LogLevel: ctx.String("log-level"),
 	}
@@ -65,15 +69,27 @@ func run(ctx context.Context, cfg *config.Config) error {
 	})
 
 	eg.Go(func() error {
+		r := mux.NewRouter()
+		r.HandleFunc("/battery", handler.Battery(winetSvc))
+		r.HandleFunc("/inverter", handler.Inverter(winetSvc))
+		r.Use(handler.LoggingMiddleware)
+
+		srv := &http.Server{
+			Handler:      r,
+			Addr:         "127.0.0.1:8000",
+			WriteTimeout: 15 * time.Second,
+			ReadTimeout:  15 * time.Second,
+		}
+
+		return srv.ListenAndServe()
+	})
+
+	eg.Go(func() error {
 		// handle any async errors from service
 		for {
 			err := <-errorChan
 			logger.Error(err.Error())
 		}
-	})
-	eg.Go(func() error {
-		time.Sleep(time.Hour)
-		return nil
 	})
 
 	return eg.Wait()

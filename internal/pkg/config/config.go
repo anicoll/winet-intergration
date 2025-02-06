@@ -1,5 +1,7 @@
 package config
 
+import "time"
+
 type Config struct {
 	WinetCfg *WinetConfig
 	MqttCfg  *WinetConfig
@@ -7,8 +9,9 @@ type Config struct {
 }
 
 type WinetConfig struct {
-	Host     string
-	Username string
-	Password string
-	Ssl      bool
+	Host         string
+	Username     string
+	Password     string
+	Ssl          bool
+	PollInterval time.Duration
 }

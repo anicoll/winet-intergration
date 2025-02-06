@@ -5,4 +5,12 @@ services:
       - "9001:9001"
       - "1883:1883"
     volumes:
-      - ./mosquitto/data:/mosquitto/data/
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/log:/mosquitto/log
+    networks:
+      - mosquitto
+networks:
+  mosquitto:
+    name: mosquitto
+    driver: bridge
