@@ -26,8 +26,9 @@ func (s *service) handleDeviceListMessage(data []byte, c ws.Connection) {
 			Model:        device.DevModel,
 			SerialNumber: device.DevSN,
 		}
-		s.publisher.RegisterDevice(s.currentDevice)
-		s.logger.Info("detected device")
+		err = s.publisher.RegisterDevice(s.currentDevice)
+		s.sendIfErr(err)
+		s.logger.Debug("detected device", zap.Any("device", device), zap.Error(err))
 		for _, qs := range model.DeviceStages[device.DevType] {
 			s.logger.Debug("querying for device", zap.Any("device", device))
 			requestData, err := json.Marshal(model.RealRequest{

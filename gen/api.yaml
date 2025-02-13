@@ -1,0 +1,102 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Winet-S Server
+paths:
+  /battery/{state}:
+    post:
+      parameters:
+        - name: state
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: Change State Payload
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeBatteryStatePayload"
+      responses:
+        "200":
+          description: change state response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Empty"
+  /inverter/{state}:
+    post:
+      parameters:
+        - name: state
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: Change State Payload
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeInverterStatePayload"
+      responses:
+        "200":
+          description: change state response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Empty"
+  /inverter/feedin:
+    post:
+      requestBody:
+        description: Change Feed in settings
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeFeedinPayload"
+      responses:
+        "200":
+          description: change state response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Empty"
+components:
+  schemas:
+    Empty:
+      type: object
+    ChangeBatteryStatePayload:
+      type: object
+      required:
+        - state
+      properties:
+        power:
+          type: string
+          example: 6.6
+        state:
+          type: string
+          in: path
+          example: self_consumption
+          enum:
+            - self_consumption
+            - charge
+            - discharge
+    ChangeInverterStatePayload:
+      type: object
+      required:
+        - state
+      properties:
+        state:
+          type: string
+          in: path
+          example: "on"
+          enum:
+            - "on"
+            - "off"
+    ChangeFeedinPayload:
+      type: object
+      required:
+        - disable
+      properties:
+        disable:
+          type: boolean
+          example: true

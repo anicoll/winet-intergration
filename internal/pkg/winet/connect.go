@@ -29,6 +29,6 @@ func (s *service) handleConnectMessage(data []byte, c ws.Connection) {
 	err = c.Send(ws.Msg{
 		Body: data,
 	})
-	s.logger.Debug("sent msg", zap.String("query_stage", model.Login.String()))
 	s.sendIfErr(err)
+	s.logger.Debug("sent msg", zap.String("query_stage", model.Login.String()), zap.Error(err))
 }
