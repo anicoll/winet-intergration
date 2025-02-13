@@ -6,9 +6,10 @@ import (
 	"time"
 
 	"github.com/anicoll/winet-integration/internal/pkg/config"
-	"github.com/anicoll/winet-integration/internal/pkg/handler"
 	"github.com/anicoll/winet-integration/internal/pkg/mqtt"
+	"github.com/anicoll/winet-integration/internal/pkg/server"
 	"github.com/anicoll/winet-integration/internal/pkg/winet"
+	"github.com/anicoll/winet-integration/pkg/api"
 	paho_mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/gorilla/mux"
 	"github.com/urfave/cli/v2"
@@ -72,12 +73,14 @@ func run(ctx context.Context, cfg *config.Config) error {
 
 	eg.Go(func() error {
 		r := mux.NewRouter()
-		r.HandleFunc("/battery", handler.Battery(winetSvc))
-		r.HandleFunc("/inverter", handler.Inverter(winetSvc))
-		r.Use(handler.LoggingMiddleware)
+		handler := api.HandlerWithOptions(server.New(winetSvc), api.GorillaServerOptions{
+			BaseURL:     "/",
+			BaseRouter:  r,
+			Middlewares: []api.MiddlewareFunc{server.LoggingMiddleware},
+		})
 
 		srv := &http.Server{
-			Handler:      r,
+			Handler:      handler,
 			Addr:         "127.0.0.1:8000",
 			WriteTimeout: 15 * time.Second,
 			ReadTimeout:  15 * time.Second,

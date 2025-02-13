@@ -15,18 +15,67 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gorilla/mux"
+	"github.com/oapi-codegen/runtime"
 )
 
-// Pong defines model for Pong.
-type Pong struct {
-	Ping string `json:"ping"`
+// Defines values for ChangeBatteryStatePayloadState.
+const (
+	Charge          ChangeBatteryStatePayloadState = "charge"
+	Discharge       ChangeBatteryStatePayloadState = "discharge"
+	SelfConsumption ChangeBatteryStatePayloadState = "self_consumption"
+)
+
+// Defines values for ChangeInverterStatePayloadState.
+const (
+	Off ChangeInverterStatePayloadState = "off"
+	On  ChangeInverterStatePayloadState = "on"
+)
+
+// ChangeBatteryStatePayload defines model for ChangeBatteryStatePayload.
+type ChangeBatteryStatePayload struct {
+	Power *string                        `json:"power,omitempty"`
+	State ChangeBatteryStatePayloadState `json:"state"`
 }
+
+// ChangeBatteryStatePayloadState defines model for ChangeBatteryStatePayload.State.
+type ChangeBatteryStatePayloadState string
+
+// ChangeFeedinPayload defines model for ChangeFeedinPayload.
+type ChangeFeedinPayload struct {
+	Disable bool `json:"disable"`
+}
+
+// ChangeInverterStatePayload defines model for ChangeInverterStatePayload.
+type ChangeInverterStatePayload struct {
+	State ChangeInverterStatePayloadState `json:"state"`
+}
+
+// ChangeInverterStatePayloadState defines model for ChangeInverterStatePayload.State.
+type ChangeInverterStatePayloadState string
+
+// Empty defines model for Empty.
+type Empty = map[string]interface{}
+
+// PostBatteryStateJSONRequestBody defines body for PostBatteryState for application/json ContentType.
+type PostBatteryStateJSONRequestBody = ChangeBatteryStatePayload
+
+// PostInverterFeedinJSONRequestBody defines body for PostInverterFeedin for application/json ContentType.
+type PostInverterFeedinJSONRequestBody = ChangeFeedinPayload
+
+// PostInverterStateJSONRequestBody defines body for PostInverterState for application/json ContentType.
+type PostInverterStateJSONRequestBody = ChangeInverterStatePayload
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
-	// (GET /ping)
-	GetPing(w http.ResponseWriter, r *http.Request)
+	// (POST /battery/{state})
+	PostBatteryState(w http.ResponseWriter, r *http.Request, state string)
+
+	// (POST /inverter/feedin)
+	PostInverterFeedin(w http.ResponseWriter, r *http.Request)
+
+	// (POST /inverter/{state})
+	PostInverterState(w http.ResponseWriter, r *http.Request, state string)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -38,11 +87,61 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
-// GetPing operation middleware
-func (siw *ServerInterfaceWrapper) GetPing(w http.ResponseWriter, r *http.Request) {
+// PostBatteryState operation middleware
+func (siw *ServerInterfaceWrapper) PostBatteryState(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "state" -------------
+	var state string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "state", mux.Vars(r)["state"], &state, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state", Err: err})
+		return
+	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetPing(w, r)
+		siw.Handler.PostBatteryState(w, r, state)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostInverterFeedin operation middleware
+func (siw *ServerInterfaceWrapper) PostInverterFeedin(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostInverterFeedin(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostInverterState operation middleware
+func (siw *ServerInterfaceWrapper) PostInverterState(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "state" -------------
+	var state string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "state", mux.Vars(r)["state"], &state, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostInverterState(w, r, state)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -165,7 +264,11 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	r.HandleFunc(options.BaseURL+"/ping", wrapper.GetPing).Methods("GET")
+	r.HandleFunc(options.BaseURL+"/battery/{state}", wrapper.PostBatteryState).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/inverter/feedin", wrapper.PostInverterFeedin).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/inverter/{state}", wrapper.PostInverterState).Methods("POST")
 
 	return r
 }
@@ -173,11 +276,15 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/0RQwU4rMQz8ldW8d1x1F7jlxgn1gNQ74hCybutqNzGJqUBV/h05y8LJjjNjz8wNIS2S",
-	"IkUtcDeUcKbFt/aQ4smq5CSUlalNhdcpffpFZoKDGK6Hfom9imZD1Noj0/sHZ5rgXlba6y8qvV0oKKrB",
-	"OB6TbVTWtu+ZIy9+7ozSPR72XaF8pYweV8qFU4TD3W7cjag9klD0wnB4aKMe4vXclA6b1BOpFXPhlVPc",
-	"T3B4Ij1wE56pSIpltXc/jlZCikqx0bzIzKERh0ux61tK1v3PdITDv+EvxuEnw6EF2CxOVEJm0VW8kHbb",
-	"UfuvtX4HAAD//79Hw2OHAQAA",
+	"H4sIAAAAAAAC/9RUzY7bPAx8FYPfd3TjtAX2oOMWLbC3BXLoYREUik0nWtiUKjJpg8DvXojKn5tk0cMW",
+	"6J4iRDQ5M5zRDmrfB09IwmB2wPUKe6vHTytLS7y3Ihi3M7GCj3bbedukyxB9wCgOtTT4HxjTAX/aPnQI",
+	"5m5yV4JsA4IBluhoCUMJnLpoHa17ME/A2LXfak+87oM4T1BCvbJxiVBC43h/npenxtc+cQQGgpUVXMwc",
+	"Soj4fe0iNjpPAcyPZX7xjLUkaJntF8TG0U2ejWO76HDEVOIaj/0W3ndo6WLu4cPbkx9og1Ewviz0hYDK",
+	"37ftWKNXU+VzH2Sb5v12kzo4ar1eOdGhXx2hvJsVM4wbjFDCBiOnBRl4P5lOpqmfD0g2ODDwUf8qFaBS",
+	"qxbZadVO4QzZVyzpN0lg07IfGjDw6FnObaldou1RMDKYp92IOtk+U8+VJ955cdnwZxSPGs1zMbLc+0ZF",
+	"qD0JkiKyIXSuVkzVMyeSu7NW/0dswcB/1Slc1T5Z1e1YqaoNch1ddrbZe6PQsuJYl4Bx8MTZFB+m01dD",
+	"lxd+BUmdkaiMxWF8KhxKqNzevFWr+Xl5dQen56zB31R5HOfb+qa6wlHBKOJoyf+yxH8Uj9Fr8hbzcfU5",
+	"fKMBGYZfAQAA//8BsunCZgcAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
