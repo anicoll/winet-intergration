@@ -11,7 +11,6 @@ import (
 	"github.com/anicoll/winet-integration/internal/pkg/winet"
 	"github.com/anicoll/winet-integration/pkg/api"
 	paho_mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/gorilla/mux"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -72,15 +71,10 @@ func run(ctx context.Context, cfg *config.Config) error {
 	})
 
 	eg.Go(func() error {
-		r := mux.NewRouter()
-		handler := api.HandlerWithOptions(server.New(winetSvc), api.GorillaServerOptions{
-			BaseURL:     "/",
-			BaseRouter:  r,
-			Middlewares: []api.MiddlewareFunc{server.LoggingMiddleware},
-		})
-
 		srv := &http.Server{
-			Handler:      handler,
+			Handler: api.HandlerWithOptions(server.New(winetSvc), api.GorillaServerOptions{
+				Middlewares: []api.MiddlewareFunc{server.LoggingMiddleware},
+			}),
 			Addr:         "127.0.0.1:8000",
 			WriteTimeout: 15 * time.Second,
 			ReadTimeout:  15 * time.Second,

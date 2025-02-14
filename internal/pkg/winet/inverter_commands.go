@@ -198,22 +198,32 @@ func (s *service) SendInverterStateChangeCommand(disable bool) (bool, error) {
 }
 
 func (s *service) SetFeedInLimitation(feedinLimited bool) (bool, error) {
-	paramRequest := model.InverterParamRequest{
+	paramRequests := []model.InverterParamRequest{{
 		Accuracy:   0,
 		ParamAddr:  31221,
 		ParamID:    13,
 		ParamType:  1,
 		ParamValue: "170",
 		ParamName:  "Feed-in Limitation",
-	}
+	}, {
+		Accuracy:   2,
+		ParamAddr:  31222,
+		ParamID:    14,
+		ParamName:  "Feed-in Limitation Value",
+		ParamType:  2,
+		ParamValue: "0.00",
+	}}
+
 	if !feedinLimited {
-		paramRequest = model.InverterParamRequest{
-			Accuracy:   0,
-			ParamAddr:  31221,
-			ParamID:    13,
-			ParamName:  "Feed-in Limitation",
-			ParamType:  1,
-			ParamValue: "85",
+		paramRequests = []model.InverterParamRequest{
+			{
+				Accuracy:   0,
+				ParamAddr:  31221,
+				ParamID:    13,
+				ParamName:  "Feed-in Limitation",
+				ParamType:  1,
+				ParamValue: "85",
+			},
 		}
 	}
 	nowTime := fmt.Sprintf("%d", time.Now().UnixMilli())
@@ -228,13 +238,11 @@ func (s *service) SetFeedInLimitation(feedinLimited bool) (bool, error) {
 		DevCode:        3344,
 		DevType:        model.DeviceTypeInverter,
 		DevIDArray:     []string{"1"},
-		Type:           "9",
+		Type:           "7",
 		Count:          "1",
 		CurrentPackNum: 1,
 		PackNumTotal:   1,
-		List: []model.InverterParamRequest{
-			paramRequest,
-		},
+		List:           paramRequests,
 	})
 	s.sendIfErr(err)
 	s.sendIfErr(s.conn.Send(ws.Msg{
@@ -250,7 +258,7 @@ func (s *service) handleParamMessage(data []byte, _ ws.Connection) {
 	res := model.ParsedResult[model.GenericReponse[model.InverterParamResponse]]{}
 	err := json.Unmarshal(data, &res)
 	s.sendIfErr(err)
-	s.logger.Info(string(data), zap.Any("payload", res))
+	s.logger.Info("param_message", zap.Any("payload", res))
 
 	s.processed <- res
 }

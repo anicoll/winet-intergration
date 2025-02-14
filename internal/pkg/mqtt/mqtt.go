@@ -6,21 +6,28 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/anicoll/winet-integration/internal/pkg/model"
 	paho_mqtt "github.com/eclipse/paho.mqtt.golang"
+	"go.uber.org/zap"
 )
 
 type service struct {
 	client            paho_mqtt.Client
 	configuredDevices map[string]struct{}
+	sensors           sync.Map
+	logger            *zap.Logger
 }
 
 func New(client paho_mqtt.Client) *service {
 	return &service{
 		client:            client,
 		configuredDevices: make(map[string]struct{}),
+		sensors:           sync.Map{},
+		logger:            zap.L(), // returns the global logger.
+
 	}
 }
 
@@ -37,6 +44,7 @@ func (s *service) Connect() error {
 }
 
 func (s *service) PublishData(deviceStatusMap map[model.Device][]model.DeviceStatus) error {
+	count := 0
 	for device, statuses := range deviceStatusMap {
 		for _, status := range statuses {
 			if err := s.RegisterDevice(&device); err != nil {
@@ -73,6 +81,10 @@ func (s *service) PublishData(deviceStatusMap map[model.Device][]model.DeviceSta
 			slugIdentifier := fmt.Sprintf("%s_%s", device.Model, device.SerialNumber)
 			topic := fmt.Sprintf("homeassistant/sensor/%s/%s/state", slugIdentifier, status.Slug)
 
+			if !s.shouldUpdate(topic, val) {
+				continue
+			}
+			count++
 			payload := map[string]string{
 				"value": val,
 			}
@@ -93,7 +105,18 @@ func (s *service) PublishData(deviceStatusMap map[model.Device][]model.DeviceSta
 			}
 		}
 	}
+	s.logger.Debug("updated sensors", zap.Int("count", count))
 	return nil
+}
+
+func (s *service) shouldUpdate(topic, newValue string) bool {
+	oldValue, exists := s.sensors.Load(topic)
+	if exists && strings.EqualFold(newValue, oldValue.(string)) {
+		return false
+	}
+	s.sensors.Store(topic, newValue)
+	return true
+
 }
 
 func (s *service) RegisterDevice(device *model.Device) error {

@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/anicoll/winet-integration/pkg/api"
@@ -127,8 +128,8 @@ func handleError(w http.ResponseWriter, err error) {
 }
 
 func unmarshalPayload[T any](r *http.Request) (*T, error) {
-	data := []byte{}
-	if _, err := r.Body.Read(data); err != nil {
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
 		return nil, err
 	}
 	var out T
