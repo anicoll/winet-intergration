@@ -114,6 +114,12 @@ func (s *service) shouldUpdate(topic, newValue string) bool {
 	if exists && strings.EqualFold(newValue, oldValue.(string)) {
 		return false
 	}
+	splits := strings.Split(topic, "/")
+	if !exists {
+		s.logger.Info("Configured sensor:", zap.String("device", splits[2]), zap.String("sensor", splits[3]), zap.String("value", newValue))
+	} else {
+		s.logger.Debug("Configured sensor:", zap.String("device", splits[2]), zap.String("sensor", splits[3]), zap.String("value", newValue))
+	}
 	s.sensors.Store(topic, newValue)
 	return true
 
