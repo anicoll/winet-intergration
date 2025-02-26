@@ -30,3 +30,4 @@ go.work.sum
 mosquitto/data/*
 mosquitto/log/*
 __debug_bin**
+winet-integration
