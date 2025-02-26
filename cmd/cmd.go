@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/anicoll/winet-integration/internal/pkg/config"
-	"github.com/anicoll/winet-integration/internal/pkg/handler"
 	"github.com/anicoll/winet-integration/internal/pkg/mqtt"
+	"github.com/anicoll/winet-integration/internal/pkg/server"
 	"github.com/anicoll/winet-integration/internal/pkg/winet"
+	api "github.com/anicoll/winet-integration/pkg/server"
 	paho_mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/gorilla/mux"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -49,7 +49,9 @@ func run(ctx context.Context, cfg *config.Config) error {
 	logCfg.ErrorOutputPaths = []string{"stdout"}
 	logCfg.Sampling = nil
 	logger := zap.Must(logCfg.Build(zap.AddCaller(), zap.AddStacktrace(zap.ErrorLevel)))
-	defer logger.Sync() // flushes buffer, if any
+	defer func() {
+		_ = logger.Sync() // flushes buffer, if any.
+	}()
 	zap.ReplaceGlobals(logger)
 	mqttOpts := paho_mqtt.NewClientOptions()
 	mqttOpts.SetPassword(cfg.MqttCfg.Password)
@@ -69,13 +71,10 @@ func run(ctx context.Context, cfg *config.Config) error {
 	})
 
 	eg.Go(func() error {
-		r := mux.NewRouter()
-		r.HandleFunc("/battery", handler.Battery(winetSvc))
-		r.HandleFunc("/inverter", handler.Inverter(winetSvc))
-		r.Use(handler.LoggingMiddleware)
-
 		srv := &http.Server{
-			Handler:      r,
+			Handler: api.HandlerWithOptions(server.New(winetSvc), api.GorillaServerOptions{
+				Middlewares: []api.MiddlewareFunc{server.LoggingMiddleware},
+			}),
 			Addr:         "127.0.0.1:8000",
 			WriteTimeout: 15 * time.Second,
 			ReadTimeout:  15 * time.Second,
@@ -86,10 +85,14 @@ func run(ctx context.Context, cfg *config.Config) error {
 
 	eg.Go(func() error {
 		// handle any async errors from service
-		for {
-			err := <-errorChan
+		select {
+		case err := <-errorChan:
 			logger.Error(err.Error())
+		case <-ctx.Done():
+			logger.Info("context done")
+			return nil
 		}
+		return nil
 	})
 
 	return eg.Wait()

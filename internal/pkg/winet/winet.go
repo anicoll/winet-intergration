@@ -97,7 +97,7 @@ func (s *service) onMessage(data []byte, c ws.Connection) {
 		s.storedData = []byte{}
 	}
 
-	s.logger.Info("received message", zap.String("result", result.ResultMessage), zap.String("query_stage", result.ResultData.Service.String()))
+	s.logger.Debug("received message", zap.String("result", result.ResultMessage), zap.String("query_stage", result.ResultData.Service.String()))
 	if result.ResultMessage != "success" {
 		s.reconnect()
 	}

@@ -8,6 +8,9 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen --config=./gen/config.yaml ./gen/api.yaml
+//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen --config=./gen/amber/config.yaml ./gen/amber/api.json
+
 func main() {
 	app := &cli.App{
 		Name:   "winet-controller",
@@ -38,6 +41,12 @@ func main() {
 				Name:     "winet-host",
 				EnvVars:  []string{"WINET_HOST"},
 				Required: true,
+			},
+			&cli.IntFlag{
+				Name:     "poll-timer",
+				EnvVars:  []string{"POLL_TIMER"},
+				Required: false,
+				Value:    10,
 			},
 			&cli.StringFlag{
 				Name:    "log-level",

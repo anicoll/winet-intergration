@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=../configuration-schema.json
+package: amber
+output: ./pkg/amber/client.gen.go
+generate:
+  models: true
+  embedded-spec: true
+  client: true

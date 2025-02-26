@@ -134,6 +134,18 @@ type InverterUpdateRequest struct {
 	List           []InverterParamRequest `json:"list"`
 }
 
+type DisableInverterRequest struct {
+	Request
+	DevCode    int        `json:"dev_code"`
+	DevType    DeviceType `json:"dev_type"`
+	DevIDArray []string   `json:"devid_array"`
+	Type       string     `json:"type"`
+	Count      string     `json:"count"`
+	List       []struct {
+		PowerSwitch string `json:"power_switch"`
+	} `json:"list"`
+}
+
 type InverterParamRequest struct {
 	Accuracy   int    `json:"accuracy"`
 	ParamAddr  int    `json:"param_addr"`

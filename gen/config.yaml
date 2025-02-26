@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=../configuration-schema.json
+package: api
+output: ./pkg/server/api.gen.go
+generate:
+  models: true
+  gorilla-server: true
+  embedded-spec: true
