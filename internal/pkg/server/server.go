@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/anicoll/winet-integration/pkg/api"
+	api "github.com/anicoll/winet-integration/pkg/server"
 	"go.uber.org/zap"
 )
 

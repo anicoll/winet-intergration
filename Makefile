@@ -1,5 +1,6 @@
 generate-api:
-	mkdir -p ./pkg/api
+	mkdir -p ./pkg/server
+	mkdir -p ./pkg/amber
 	go generate ./...
 
 .PHONY: test
@@ -9,7 +10,6 @@ test:
 .PHONY: tidy
 tidy:
 	go mod tidy
-
 
 .PHONY: build
 build:

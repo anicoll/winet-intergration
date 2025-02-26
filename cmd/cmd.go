@@ -9,7 +9,7 @@ import (
 	"github.com/anicoll/winet-integration/internal/pkg/mqtt"
 	"github.com/anicoll/winet-integration/internal/pkg/server"
 	"github.com/anicoll/winet-integration/internal/pkg/winet"
-	"github.com/anicoll/winet-integration/pkg/api"
+	api "github.com/anicoll/winet-integration/pkg/server"
 	paho_mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
