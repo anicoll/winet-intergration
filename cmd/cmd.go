@@ -11,6 +11,7 @@ import (
 	"github.com/anicoll/winet-integration/internal/pkg/winet"
 	api "github.com/anicoll/winet-integration/pkg/server"
 	paho_mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/robfig/cron/v3"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -31,6 +32,10 @@ func WinetCommand(ctx *cli.Context) error {
 		LogLevel: ctx.String("log-level"),
 	}
 
+	// ac, err := amber.New(ctx.Context, "https://api.amber.com.au/v1", "psk_f74f7d2495dcfc98186a5c16ffee655b")
+	// _ = err
+	// sites := ac.GetSites()
+	// _ = ac.GetPrices(context.Background(), sites[0].Id)
 	return run(ctx.Context, cfg)
 }
 
@@ -68,6 +73,38 @@ func run(ctx context.Context, cfg *config.Config) error {
 
 	eg.Go(func() error {
 		return winetSvc.Connect(ctx)
+	})
+
+	eg.Go(func() error {
+		// CRON automation
+		c := cron.New()
+		c.AddFunc("CRON_TZ=Australia/Adelaide 1 17 * * *", func() {
+			time.Sleep(time.Second)
+			// enable feedin
+			if _, err := winetSvc.SetFeedInLimitation(false); err != nil {
+				logger.Error(err.Error())
+			}
+			// discharge batter at 1.6Kw/h
+			if _, err := winetSvc.SendDischargeCommand("1.6"); err != nil {
+				logger.Error(err.Error())
+			}
+			logger.Info("automated discharge of battery")
+		})
+
+		c.AddFunc("CRON_TZ=Australia/Adelaide 1 21 * * *", func() {
+			time.Sleep(time.Second)
+			// enable feedin
+			if _, err := winetSvc.SetFeedInLimitation(true); err != nil {
+				logger.Error(err.Error())
+			}
+			// stop discharge
+			if _, err := winetSvc.SendSelfConsumptionCommand(); err != nil {
+				logger.Error(err.Error())
+			}
+			logger.Info("automated consumption of battery and disable feedin")
+		})
+		c.Run()
+		return nil
 	})
 
 	eg.Go(func() error {
