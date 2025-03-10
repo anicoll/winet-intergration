@@ -27,7 +27,9 @@ func WinetCommand(ctx *cli.Context) error {
 			PollInterval: ctx.Duration("poll-interval"),
 		},
 		MqttCfg: &config.WinetConfig{
-			Host: "localhost:1883",
+			Host:     ctx.String("mqtt-host"),
+			Username: ctx.String("mqtt-user"),
+			Password: ctx.String("mqtt-pass"),
 		},
 		LogLevel: ctx.String("log-level"),
 	}
