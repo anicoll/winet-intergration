@@ -167,3 +167,7 @@ func (s *service) Connect(ctx context.Context) error {
 	}
 	return s.reconnect()
 }
+
+func (s *service) Reconnect(ctx context.Context) error {
+	return s.reconnect()
+}

@@ -123,6 +123,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 		select {
 		case err := <-errorChan:
 			logger.Error(err.Error())
+			_ = winetSvc.Reconnect(ctx) // reconnect
 		case <-ctx.Done():
 			logger.Info("context done")
 			return nil
