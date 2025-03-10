@@ -1,3 +1,26 @@
 ...
-image: "android101/winet-s"
-...
+name: "WINET-S Controller"
+version: "0.1.0"
+slug: 'winet-s controller'
+panel_icon: mdi:solar-power
+startup: application
+url: 'https://github.com/anicoll/winet-intergration'
+description: >-
+  "Connects to the winet-s dongle and provides an interface to control a sungrow inverter/battery."
+arch:
+  - amd64
+  - armv7
+  - aarch64
+ports:
+  8080/tcp: 8080
+environment:
+  WINET_HOST=0.0.0.0
+  WINET_SSL=true
+  WINET_PASSWORD=""
+  WINET_USERNAME=""
+  AMBER_TOKEN=""
+  AMBER_HOST="https://api.amber.com.au/v1"
+  POLL_INTERVAL=10
+  LOG_LEVEL=INFO
+
+image: android101/winet-s
