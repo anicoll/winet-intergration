@@ -12,7 +12,7 @@ require (
 	github.com/oapi-codegen/runtime v1.1.1
 	github.com/urfave/cli/v2 v2.27.5
 	go.uber.org/zap v1.27.0
-	golang.org/x/sync v0.11.0
+	golang.org/x/sync v0.12.0
 )
 
 require (
