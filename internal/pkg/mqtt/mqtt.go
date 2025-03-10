@@ -78,7 +78,7 @@ func (s *service) PublishData(deviceStatusMap map[model.Device][]model.DeviceSta
 				val = value.FloatString(4)
 			}
 
-			slugIdentifier := fmt.Sprintf("%s_%s", device.Model, device.SerialNumber)
+			slugIdentifier := fmt.Sprintf("%s_%s", strings.Replace(device.Model, ".", "", -1), device.SerialNumber)
 			topic := fmt.Sprintf("homeassistant/sensor/%s/%s/state", slugIdentifier, status.Slug)
 
 			if !s.shouldUpdate(topic, val) {
