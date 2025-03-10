@@ -52,6 +52,9 @@ func (s *service) PublishData(deviceStatusMap map[model.Device][]model.DeviceSta
 			}
 			isTextSensor := model.TextSensors.HasSlug(status.Slug)
 			val := ""
+			if isTextSensor {
+				val = *status.Value
+			}
 			if (!isTextSensor && status.Value == nil) || *status.Value == "--" {
 				status.Value = func() *string {
 					s := "0.00"
