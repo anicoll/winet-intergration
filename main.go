@@ -20,12 +20,12 @@ func main() {
 			&cli.StringFlag{
 				Name:    "winet-password",
 				EnvVars: []string{"WINET_PASSWORD"},
-				Value:   "pw8888",
+				Value:   "",
 			},
 			&cli.StringFlag{
 				Name:    "winet-username",
 				EnvVars: []string{"WINET_USERNAME"},
-				Value:   "admin",
+				Value:   "",
 			},
 			&cli.BoolFlag{
 				Name:    "winet-ssl",
@@ -41,12 +41,6 @@ func main() {
 				Name:     "winet-host",
 				EnvVars:  []string{"WINET_HOST"},
 				Required: true,
-			},
-			&cli.IntFlag{
-				Name:     "poll-timer",
-				EnvVars:  []string{"POLL_TIMER"},
-				Required: false,
-				Value:    10,
 			},
 			&cli.StringFlag{
 				Name:    "log-level",
