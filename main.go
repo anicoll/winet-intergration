@@ -23,6 +23,21 @@ func main() {
 				Value:   "",
 			},
 			&cli.StringFlag{
+				Name:    "mqtt-host",
+				EnvVars: []string{"MQTT_HOST"},
+				Value:   "",
+			},
+			&cli.StringFlag{
+				Name:    "mqtt-pass",
+				EnvVars: []string{"MQTT_PASS"},
+				Value:   "",
+			},
+			&cli.StringFlag{
+				Name:    "mqtt-user",
+				EnvVars: []string{"MQTT_USER"},
+				Value:   "",
+			},
+			&cli.StringFlag{
 				Name:    "winet-username",
 				EnvVars: []string{"WINET_USERNAME"},
 				Value:   "",
