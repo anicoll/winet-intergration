@@ -139,6 +139,8 @@ func (s *service) onError(err error) {
 }
 
 func (s *service) reconnect() error {
+	_ = s.conn.Close()
+	s.conn = nil
 	var u url.URL
 	if s.cfg.Ssl {
 		u = url.URL{Scheme: "wss", Host: s.cfg.Host + ":443", Path: "/ws/home/overview"}
