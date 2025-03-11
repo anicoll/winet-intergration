@@ -53,6 +53,7 @@ func (s *service) sendIfErr(err error) {
 }
 
 func (s *service) onconnect(c ws.Connection) {
+	s.conn = c
 	s.logger.Debug("onconnect ws received")
 	data, err := json.Marshal(model.ConnectRequest{
 		Request: model.Request{
@@ -173,5 +174,9 @@ func (s *service) Connect(ctx context.Context) error {
 		s.logger.Error("failed to get properties", zap.Error(err))
 		return err
 	}
+	return s.reconnect()
+}
+
+func (s *service) Reconnect() error {
 	return s.reconnect()
 }

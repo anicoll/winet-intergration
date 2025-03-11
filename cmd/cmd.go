@@ -77,7 +77,9 @@ func run(ctx context.Context, cfg *config.Config) error {
 		// CRON automation
 		c := cron.New()
 		c.AddFunc("CRON_TZ=Australia/Adelaide 1 17 * * *", func() {
-			time.Sleep(time.Second)
+			if err := winetSvc.Reconnect(); err != nil {
+				logger.Error(err.Error())
+			}
 			// enable feedin
 			if _, err := winetSvc.SetFeedInLimitation(false); err != nil {
 				logger.Error(err.Error())
@@ -90,7 +92,9 @@ func run(ctx context.Context, cfg *config.Config) error {
 		})
 
 		c.AddFunc("CRON_TZ=Australia/Adelaide 1 21 * * *", func() {
-			time.Sleep(time.Second)
+			if err := winetSvc.Reconnect(); err != nil {
+				logger.Error(err.Error())
+			}
 			// enable feedin
 			if _, err := winetSvc.SetFeedInLimitation(true); err != nil {
 				logger.Error(err.Error())
