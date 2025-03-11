@@ -3,12 +3,11 @@ package winet
 import (
 	"encoding/json"
 
-	ws "github.com/anicoll/evtwebsocket"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
 	"go.uber.org/zap"
 )
 
-func (s *service) handleConnectMessage(data []byte, c ws.Connection) {
+func (s *service) handleConnectMessage(data []byte) {
 	res := model.ParsedResult[model.ConnectResponse]{}
 	err := json.Unmarshal(data, &res)
 	s.sendIfErr(err)
@@ -26,9 +25,6 @@ func (s *service) handleConnectMessage(data []byte, c ws.Connection) {
 	})
 	s.sendIfErr(err)
 
-	err = c.Send(ws.Msg{
-		Body: data,
-	})
-	s.sendIfErr(err)
+	s.sendMessage(data)
 	s.logger.Debug("sent msg", zap.String("query_stage", model.Login.String()), zap.Error(err))
 }

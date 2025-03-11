@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	ws "github.com/anicoll/evtwebsocket"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
 	"go.uber.org/zap"
 )
@@ -45,9 +44,7 @@ func (s *service) SendSelfConsumptionCommand() (bool, error) {
 		},
 	})
 	s.sendIfErr(err)
-	s.sendIfErr(s.conn.Send(ws.Msg{
-		Body: data,
-	}))
+	s.sendMessage(data)
 	res := s.waiter()
 	result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
 	s.logger.Info("SendSelfConsumptionCommand", zap.Any("any", res))
@@ -99,9 +96,7 @@ func (s *service) SendDischargeCommand(dischargePower string) (bool, error) {
 		},
 	})
 	s.sendIfErr(err)
-	s.sendIfErr(s.conn.Send(ws.Msg{
-		Body: data,
-	}))
+	s.sendMessage(data)
 	res := s.waiter()
 	result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
 	s.logger.Info("SendSelfConsumptionCommand", zap.Any("any", res))
@@ -153,9 +148,7 @@ func (s *service) SendChargeCommand(chargePower string) (bool, error) {
 		},
 	})
 	s.sendIfErr(err)
-	s.sendIfErr(s.conn.Send(ws.Msg{
-		Body: data,
-	}))
+	s.sendMessage(data)
 	res := s.waiter()
 	result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
 	s.logger.Info("SendSelfConsumptionCommand", zap.Any("any", res))
@@ -188,9 +181,7 @@ func (s *service) SendInverterStateChangeCommand(disable bool) (bool, error) {
 		},
 	})
 	s.sendIfErr(err)
-	s.sendIfErr(s.conn.Send(ws.Msg{
-		Body: data,
-	}))
+	s.sendMessage(data)
 
 	result := s.waiter().(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
 	s.logger.Info("SendInverterStateChangeCommand", zap.Any("any", result))
@@ -245,16 +236,14 @@ func (s *service) SetFeedInLimitation(feedinLimited bool) (bool, error) {
 		List:           paramRequests,
 	})
 	s.sendIfErr(err)
-	s.sendIfErr(s.conn.Send(ws.Msg{
-		Body: data,
-	}))
+	s.sendMessage(data)
 	res := s.waiter()
 	result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
 	s.logger.Info("SendSelfConsumptionCommand", zap.Any("any", res))
 	return result.ResultMessage == "success", nil
 }
 
-func (s *service) handleParamMessage(data []byte, _ ws.Connection) {
+func (s *service) handleParamMessage(data []byte) {
 	res := model.ParsedResult[model.GenericReponse[model.InverterParamResponse]]{}
 	err := json.Unmarshal(data, &res)
 	s.sendIfErr(err)

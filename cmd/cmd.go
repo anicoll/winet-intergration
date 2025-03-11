@@ -38,7 +38,7 @@ func WinetCommand(ctx *cli.Context) error {
 }
 
 func run(ctx context.Context, cfg *config.Config) error {
-	errorChan := make(chan error, 1000)
+	errChan := make(chan error, 1000)
 	var err error
 
 	eg, ctx := errgroup.WithContext(ctx)
@@ -67,7 +67,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 		return err
 	}
 
-	winetSvc := winet.New(cfg.WinetCfg, mqttSvc, errorChan)
+	winetSvc := winet.New(cfg.WinetCfg, mqttSvc, errChan)
 
 	eg.Go(func() error {
 		return winetSvc.Connect(ctx)
@@ -121,9 +121,8 @@ func run(ctx context.Context, cfg *config.Config) error {
 	eg.Go(func() error {
 		// handle any async errors from service
 		select {
-		case err := <-errorChan:
-			logger.Error(err.Error())
-			_ = winetSvc.Reconnect(ctx) // reconnect
+		case err := <-errChan:
+			logger.Error("failed due to an error", zap.Error(err))
 		case <-ctx.Done():
 			logger.Info("context done")
 			return nil

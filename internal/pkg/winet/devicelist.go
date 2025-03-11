@@ -6,12 +6,12 @@ import (
 	"strconv"
 	"time"
 
-	ws "github.com/anicoll/evtwebsocket"
+	"github.com/anicoll/evtwebsocket"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
 	"go.uber.org/zap"
 )
 
-func (s *service) handleDeviceListMessage(data []byte, c ws.Connection) {
+func (s *service) handleDeviceListMessage(data []byte) {
 	res := model.ParsedResult[model.GenericReponse[model.DeviceListObject]]{}
 	err := json.Unmarshal(data, &res)
 	s.sendIfErr(err)
@@ -42,17 +42,31 @@ func (s *service) handleDeviceListMessage(data []byte, c ws.Connection) {
 			})
 			s.sendIfErr(err)
 
-			s.sendIfErr(c.Send(ws.Msg{
-				Body: requestData,
-			}))
+			s.sendMessage(requestData)
 			s.waiter()
 		}
 	}
 	ticker := time.NewTicker(time.Second * s.cfg.PollInterval)
 	<-ticker.C
-	s.sendDeviceListRequest(c)
+	s.sendDeviceListRequest()
 }
 
 func (s *service) waiter() any {
 	return <-s.processed
+}
+
+func (s *service) sendMessage(data []byte) {
+	if s.conn == nil {
+		s.logger.Error("connection is nil")
+		return
+	}
+	if !s.conn.IsConnected() {
+		s.logger.Error("connection not connected, not sending message")
+		return
+	}
+
+	err := s.conn.Send(evtwebsocket.Msg{
+		Body: data,
+	})
+	s.sendIfErr(err)
 }

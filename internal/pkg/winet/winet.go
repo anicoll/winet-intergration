@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/url"
+	"time"
 
 	ws "github.com/anicoll/evtwebsocket"
 	"github.com/anicoll/winet-integration/internal/pkg/config"
@@ -21,16 +22,17 @@ type publisher interface {
 }
 
 type service struct {
-	cfg           *config.WinetConfig
-	properties    map[string]string
-	conn          ws.Connection
-	errChan       chan error
-	token         string
-	logger        *zap.Logger
-	storedData    []byte
-	publisher     publisher
-	currentDevice *model.Device
-	processed     chan any // used to communicate when messages are processed.
+	cfg            *config.WinetConfig
+	properties     map[string]string
+	conn           ws.Connection
+	errChan        chan error
+	token          string
+	logger         *zap.Logger
+	storedData     []byte
+	publisher      publisher
+	connectionTime time.Time
+	currentDevice  *model.Device
+	processed      chan any // used to communicate when messages are processed.
 }
 
 func New(cfg *config.WinetConfig, publisher publisher, errChan chan error) *service {
@@ -46,7 +48,6 @@ func New(cfg *config.WinetConfig, publisher publisher, errChan chan error) *serv
 
 func (s *service) sendIfErr(err error) {
 	if err != nil {
-		s.logger.Error("failed due to an error", zap.Error(err))
 		s.errChan <- err
 	}
 }
@@ -62,10 +63,7 @@ func (s *service) onconnect(c ws.Connection) {
 	})
 	s.sendIfErr(err)
 	s.logger.Debug("sending msg", zap.ByteString("request", data), zap.String("query_stage", model.Connect.String()))
-	err = c.Send(ws.Msg{
-		Body: data,
-	})
-	s.sendIfErr(err)
+	s.sendMessage(data)
 	s.logger.Debug("msg sent", zap.String("query_stage", model.Connect.String()))
 }
 
@@ -85,6 +83,11 @@ func (s *service) unmarshal(data []byte) (*model.GenericResult, bool) {
 }
 
 func (s *service) onMessage(data []byte, c ws.Connection) {
+	s.conn = c
+	if !s.conn.IsConnected() {
+		s.sendIfErr(s.reconnect())
+		return
+	}
 	result, isSyntaxErr := s.unmarshal(data)
 	if isSyntaxErr {
 		s.storedData = append(s.storedData, data...)
@@ -98,28 +101,32 @@ func (s *service) onMessage(data []byte, c ws.Connection) {
 	}
 
 	s.logger.Debug("received message", zap.String("result", result.ResultMessage), zap.String("query_stage", result.ResultData.Service.String()))
-	if result.ResultMessage != "success" {
+	switch result.ResultMessage {
+	case "success":
+		break
+	case "normal user limit":
+		return
+	case "login timeout":
+		s.logger.Info("time since last connection", zap.Duration("timeout_duration", time.Since(s.connectionTime)))
 		s.reconnect()
+		return
 	}
 
 	switch result.ResultData.Service {
 	case model.Connect:
-		s.handleConnectMessage(data, c)
+		s.handleConnectMessage(data)
 	case model.DeviceList:
-		go s.handleDeviceListMessage(data, c)
+		go s.handleDeviceListMessage(data)
 	case model.Param:
-		go s.handleParamMessage(data, c)
+		go s.handleParamMessage(data)
 	case model.Local:
 	case model.Notice:
 	case model.Login:
-		s.handleLoginMessage(data, c)
+		s.handleLoginMessage(data)
 	case model.Direct:
 		go s.handleDirectMessage(data)
 	case model.Real, model.RealBattery:
 		go s.handleRealMessage(data)
-	case model.Statistics:
-	default:
-		s.reconnect()
 	}
 }
 
@@ -157,6 +164,7 @@ func (s *service) reconnect() error {
 		return err
 	}
 	s.logger.Debug("successfully connected to", zap.String("url", u.String()))
+	s.connectionTime = time.Now()
 	return nil
 }
 
@@ -165,9 +173,5 @@ func (s *service) Connect(ctx context.Context) error {
 		s.logger.Error("failed to get properties", zap.Error(err))
 		return err
 	}
-	return s.reconnect()
-}
-
-func (s *service) Reconnect(ctx context.Context) error {
 	return s.reconnect()
 }
