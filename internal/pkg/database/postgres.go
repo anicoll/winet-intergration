@@ -1,36 +1,38 @@
 package database
 
-
 import (
-	"database/sql"
-	"fmt"
-	"log"
-	"os"
+	"context"
+	"io"
 
 	"github.com/jackc/pgx/v5"
-
 )
 
 type Database struct {
-	pg 
+	conn *pgx.Conn
+	io.Closer
 }
 
-func NewDatabase() *Database {
-// urlExample := "postgres://username:password@localhost:5432/database_name"
-conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
-if err != nil {
-	fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
-	os.Exit(1)
-}
-defer conn.Close(context.Background())
-
-var name string
-var weight int64
-err = conn.QueryRow(context.Background(), "select name, weight from widgets where id=$1", 42).Scan(&name, &weight)
-if err != nil {
-	fmt.Fprintf(os.Stderr, "QueryRow failed: %v\n", err)
-	os.Exit(1)
+func NewDatabase(ctx context.Context, conn *pgx.Conn) *Database {
+initialise(ctx, conn)
+	return &Database{
+		conn: conn,
+	}
 }
 
-fmt.Println(name, weight)
+func initialise(ctx context.Context, conn *pgx.Conn) {
+	const createPropertiesTableSQL = `
+CREATE TABLE IF NOT EXISTS Properties (
+    Id SERIAL PRIMARY KEY,
+    TimeStamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    Unit TEXT NOT NULL,
+    Value TEXT NOT NULL,
+    Identifier TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_properties_identifier ON Properties (Identifier);
+CREATE INDEX IF NOT EXISTS idx_properties_timestamp ON Properties (TimeStamp);
+`
+	if _, err := conn.Exec(ctx, createPropertiesTableSQL); err != nil {
+		panic(err)
+	}
+
 }
