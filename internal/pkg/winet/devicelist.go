@@ -8,6 +8,7 @@ import (
 
 	ws "github.com/anicoll/evtwebsocket"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
+	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 	"go.uber.org/zap"
 )
 
@@ -26,7 +27,7 @@ func (s *service) handleDeviceListMessage(data []byte, c ws.Connection) {
 			Model:        device.DevModel,
 			SerialNumber: device.DevSN,
 		}
-		err = s.publisher.RegisterDevice(s.currentDevice)
+		err = publisher.RegisterDevice(s.currentDevice)
 		s.sendIfErr(err)
 		s.logger.Debug("detected device", zap.Any("device", device), zap.Error(err))
 		for _, qs := range model.DeviceStages[device.DevType] {

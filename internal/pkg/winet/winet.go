@@ -15,31 +15,25 @@ import (
 
 const EnglishLang string = "en_us"
 
-type publisher interface {
-	PublishData(deviceStatusMap map[model.Device][]model.DeviceStatus) error
-	RegisterDevice(device *model.Device) error
-}
-
 type service struct {
-	cfg           *config.WinetConfig
-	properties    map[string]string
-	conn          ws.Connection
-	errChan       chan error
-	token         string
-	logger        *zap.Logger
-	storedData    []byte
-	publisher     publisher
+	cfg        *config.WinetConfig
+	properties map[string]string
+	conn       ws.Connection
+	errChan    chan error
+	token      string
+	logger     *zap.Logger
+	storedData []byte
+
 	currentDevice *model.Device
 	processed     chan any // used to communicate when messages are processed.
 }
 
-func New(cfg *config.WinetConfig, publisher publisher, errChan chan error) *service {
+func New(cfg *config.WinetConfig, errChan chan error) *service {
 	return &service{
 		cfg:        cfg,
 		errChan:    errChan,
 		logger:     zap.L(), // returns the global logger.
 		storedData: []byte{},
-		publisher:  publisher,
 		processed:  make(chan any),
 	}
 }
