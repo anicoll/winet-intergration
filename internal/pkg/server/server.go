@@ -1,11 +1,14 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"time"
 
+	"github.com/anicoll/winet-integration/internal/pkg/model"
 	api "github.com/anicoll/winet-integration/pkg/server"
 	"go.uber.org/zap"
 )
@@ -22,13 +25,54 @@ type winetService interface {
 	SendInverterStateChangeCommand(disable bool) (bool, error)
 }
 
+type database interface {
+	GetLatestProperties(ctx context.Context) (model.Properties, error)
+	GetProperties(ctx context.Context, identifier, slug string, from, to *time.Time) (model.Properties, error)
+}
+
 type server struct {
 	winets winetService
+	db     database
 	logger *zap.Logger
 }
 
-func New(ws winetService) *server {
-	return &server{winets: ws, logger: zap.L()}
+// GetProperties implements api.ServerInterface.
+func (s *server) GetProperties(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	props, err := s.db.GetLatestProperties(ctx)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(props); err != nil {
+		handleError(w, err)
+		return
+	}
+}
+
+// GetPropertyIdentifierSlug implements api.ServerInterface.
+func (s *server) GetPropertyIdentifierSlug(w http.ResponseWriter, r *http.Request, identifier string, slug string, params api.GetPropertyIdentifierSlugParams) {
+	ctx := r.Context()
+	props, err := s.db.GetProperties(ctx, identifier, slug, params.From, params.To)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	if err := json.NewEncoder(w).Encode(props); err != nil {
+		handleError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+}
+
+func New(ws winetService, db database) *server {
+	return &server{
+		winets: ws,
+		logger: zap.L(),
+		db:     db,
+	}
 }
 
 func (s *server) PostBatteryState(w http.ResponseWriter, r *http.Request, state string) {

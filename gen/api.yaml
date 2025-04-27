@@ -3,6 +3,53 @@ info:
   version: 1.0.0
   title: Winet-S Server
 paths:
+  /properties:
+    get:
+      summary: Get properties
+      responses:
+        "200":
+          description: properties response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Property"
+  /property/{identifier}/{slug}:
+    get:
+      parameters:
+        - name: identifier
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: returns specific properties by filter.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Property"
+
   /battery/{state}:
     post:
       parameters:
@@ -100,3 +147,27 @@ components:
         disable:
           type: boolean
           example: true
+    Property:
+      type: object
+      required:
+        - disable
+      properties:
+        id:
+          type: integer
+          example: 1
+        timestamp:
+          type: string
+          format: date-time
+          example: "2023-10-01T12:00:00Z"
+        unit_of_measurement:
+          type: string
+          example: "kWh"
+        value:
+          type: string
+          example: "100"
+        identifier:
+          type: string
+          example: "SH60RS_A1"
+        slug:
+          type: string
+          example: "backup_frequency"

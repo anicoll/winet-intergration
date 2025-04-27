@@ -47,6 +47,7 @@ func PublishData(ctx context.Context, deviceStatusMap map[model.Device][]model.D
 					return &s
 				}()
 			}
+
 			if !isTextSensor {
 				value := new(big.Rat)
 				value, _ = value.SetString(*status.Value)
@@ -65,6 +66,8 @@ func PublishData(ctx context.Context, deviceStatusMap map[model.Device][]model.D
 					value = value.Mul(value, new(big.Rat).SetInt64(1000))
 				}
 				val = value.FloatString(4)
+			} else {
+				val = *status.Value
 			}
 
 			slugIdentifier := fmt.Sprintf("%s_%s", strings.Replace(device.Model, ".", "", -1), device.SerialNumber)

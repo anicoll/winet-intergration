@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gorilla/mux"
@@ -56,6 +57,22 @@ type ChangeInverterStatePayloadState string
 // Empty defines model for Empty.
 type Empty = map[string]interface{}
 
+// Property defines model for Property.
+type Property struct {
+	Id                *int       `json:"id,omitempty"`
+	Identifier        *string    `json:"identifier,omitempty"`
+	Slug              *string    `json:"slug,omitempty"`
+	Timestamp         *time.Time `json:"timestamp,omitempty"`
+	UnitOfMeasurement *string    `json:"unit_of_measurement,omitempty"`
+	Value             *string    `json:"value,omitempty"`
+}
+
+// GetPropertyIdentifierSlugParams defines parameters for GetPropertyIdentifierSlug.
+type GetPropertyIdentifierSlugParams struct {
+	From *time.Time `form:"from,omitempty" json:"from,omitempty"`
+	To   *time.Time `form:"to,omitempty" json:"to,omitempty"`
+}
+
 // PostBatteryStateJSONRequestBody defines body for PostBatteryState for application/json ContentType.
 type PostBatteryStateJSONRequestBody = ChangeBatteryStatePayload
 
@@ -76,6 +93,12 @@ type ServerInterface interface {
 
 	// (POST /inverter/{state})
 	PostInverterState(w http.ResponseWriter, r *http.Request, state string)
+	// Get properties
+	// (GET /properties)
+	GetProperties(w http.ResponseWriter, r *http.Request)
+
+	// (GET /property/{identifier}/{slug})
+	GetPropertyIdentifierSlug(w http.ResponseWriter, r *http.Request, identifier string, slug string, params GetPropertyIdentifierSlugParams)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -142,6 +165,73 @@ func (siw *ServerInterfaceWrapper) PostInverterState(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostInverterState(w, r, state)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProperties operation middleware
+func (siw *ServerInterfaceWrapper) GetProperties(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProperties(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPropertyIdentifierSlug operation middleware
+func (siw *ServerInterfaceWrapper) GetPropertyIdentifierSlug(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "identifier" -------------
+	var identifier string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "identifier", mux.Vars(r)["identifier"], &identifier, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "identifier", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", mux.Vars(r)["slug"], &slug, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetPropertyIdentifierSlugParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "from", r.URL.Query(), &params.From)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "to", r.URL.Query(), &params.To)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPropertyIdentifierSlug(w, r, identifier, slug, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -270,21 +360,29 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/inverter/{state}", wrapper.PostInverterState).Methods("POST")
 
+	r.HandleFunc(options.BaseURL+"/properties", wrapper.GetProperties).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/property/{identifier}/{slug}", wrapper.GetPropertyIdentifierSlug).Methods("GET")
+
 	return r
 }
 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/9RUzY7bPAx8FYPfd3TjtAX2oOMWLbC3BXLoYREUik0nWtiUKjJpg8DvXojKn5tk0cMW",
-	"6J4iRDQ5M5zRDmrfB09IwmB2wPUKe6vHTytLS7y3Ihi3M7GCj3bbedukyxB9wCgOtTT4HxjTAX/aPnQI",
-	"5m5yV4JsA4IBluhoCUMJnLpoHa17ME/A2LXfak+87oM4T1BCvbJxiVBC43h/npenxtc+cQQGgpUVXMwc",
-	"Soj4fe0iNjpPAcyPZX7xjLUkaJntF8TG0U2ejWO76HDEVOIaj/0W3ndo6WLu4cPbkx9og1Ewviz0hYDK",
-	"37ftWKNXU+VzH2Sb5v12kzo4ar1eOdGhXx2hvJsVM4wbjFDCBiOnBRl4P5lOpqmfD0g2ODDwUf8qFaBS",
-	"qxbZadVO4QzZVyzpN0lg07IfGjDw6FnObaldou1RMDKYp92IOtk+U8+VJ955cdnwZxSPGs1zMbLc+0ZF",
-	"qD0JkiKyIXSuVkzVMyeSu7NW/0dswcB/1Slc1T5Z1e1YqaoNch1ddrbZe6PQsuJYl4Bx8MTZFB+m01dD",
-	"lxd+BUmdkaiMxWF8KhxKqNzevFWr+Xl5dQen56zB31R5HOfb+qa6wlHBKOJoyf+yxH8Uj9Fr8hbzcfU5",
-	"fKMBGYZfAQAA//8BsunCZgcAAA==",
+	"H4sIAAAAAAAC/9RVW2/yRhD9K9a0jwYbPikPfmuqXvKGSqVIjRBa7DFs4r1kd0xrIf/3aneJsYtJiJpP",
+	"St4smNs5e+bMAXIltJIoyUJ2AJvvUDD/+fOOyS3eMiI0zZIY4YI1lWKF+1MbpdEQRx+q1d9o3Af+w4Su",
+	"ELKb6U0M1GiEDCwZLrfQxmBdFR8nawHZA1isynWupK2FJq4kxJDvmNkixFBwe/xexafCYylcQgaa0Q7O",
+	"erYxGHyuucHC9/MDrLowtXnEnNxoAe2viAWXF3EW3LJNhQOkZGrs6m2UqpDJs74viZc738k9GkLzOtFn",
+	"BHr8qiyHHH0YK78ITY3rd/bPIszVnM/IiwE/s64sl4RbNC6bFyiJl/w/qoHl7zfpH8v1TzMYU09Vb4fh",
+	"G5Y/1XpdOjAo82Ysi7hAS0zoYeo8nX+bzNJJOvtzNs/SNEvTvyCGUhnBCDIoGOHE5Y7VrCWntSrXApmt",
+	"DQqUNKz+dL8by9uzqh6qB2Zp+ub7XFaPi+SyVP6JOPmK91wiTZbREs0eDcSwR2PdomQwm6bT1A2iNEqm",
+	"OWTwzf8Ue6H450s2YeOTg5dFG/bbeoDumZlbursCMlgoS3178FUME0hoLGQPh4EEJRMBYog84QsLFIyn",
+	"J7WOi1UIRku3qvB6y5WkI+VM64rnfqbk0TqQh16pHw2WkMEPycnkkqPDJZftzbNaoM0NDw6THXc08mFR",
+	"F+cGs1pJG4Q/T9MPmy4s3sgkeZjE0xi9tHeBbQwJP5pIUnofe/3pXhwneB58T5aHtnqZXxcXcRlZJOJy",
+	"az8zxVetx8DVv+J+jJ6lr7sgw0u1xZFn+w1pcYr6nwg4obBvQelOadv5OzOGjaI7Aehji8HWQjDThPmj",
+	"Hsw+7CY5nA5vmxzcQW2vIKK567KW7gZfo+PehX+PmOPxpQhd31/muUbTnOqURgno511z7i8VI/X+UqvP",
+	"pieDVBtpI6sx5yXPe9KJNk1U8orQTP36tO2/AQAA//+AMWDJLQwAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
