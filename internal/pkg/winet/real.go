@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/gosimple/slug"
 
+	"github.com/anicoll/winet-integration/internal/pkg/contxt"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
+	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 )
 
 func (s *service) handleRealMessage(data []byte) {
@@ -34,7 +37,7 @@ func (s *service) handleRealMessage(data []byte) {
 		datapoints = append(datapoints, dataPoint)
 	}
 	datapointsToPublish[*s.currentDevice] = datapoints
-	err = s.publisher.PublishData(datapointsToPublish)
+	err = publisher.PublishData(contxt.NewContext(time.Second*5), datapointsToPublish)
 	s.sendIfErr(err)
 	s.processed <- struct{}{} // indicate we are done.
 }

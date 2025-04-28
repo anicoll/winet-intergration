@@ -3,18 +3,21 @@ package cmd
 import (
 	"context"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/anicoll/winet-integration/internal/pkg/config"
-	"github.com/anicoll/winet-integration/internal/pkg/mqtt"
+	"github.com/anicoll/winet-integration/internal/pkg/database"
+	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 	"github.com/anicoll/winet-integration/internal/pkg/server"
 	"github.com/anicoll/winet-integration/internal/pkg/winet"
 	api "github.com/anicoll/winet-integration/pkg/server"
-	paho_mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/jackc/pgx/v5"
 	"github.com/robfig/cron/v3"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	// paho_mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 func WinetCommand(ctx *cli.Context) error {
@@ -56,58 +59,36 @@ func run(ctx context.Context, cfg *config.Config) error {
 		_ = logger.Sync() // flushes buffer, if any.
 	}()
 	zap.ReplaceGlobals(logger)
-	mqttOpts := paho_mqtt.NewClientOptions()
-	mqttOpts.SetPassword(cfg.MqttCfg.Password)
-	mqttOpts.SetUsername(cfg.MqttCfg.Username)
-	mqttOpts.AddBroker(cfg.MqttCfg.Host)
-	pahoClient := paho_mqtt.NewClient(mqttOpts)
+	// mqttOpts := paho_mqtt.NewClientOptions()
+	// mqttOpts.SetPassword(cfg.MqttCfg.Password)
+	// mqttOpts.SetUsername(cfg.MqttCfg.Username)
+	// mqttOpts.AddBroker(cfg.MqttCfg.Host)
+	// pahoClient := paho_mqtt.NewClient(mqttOpts)
 
-	mqttSvc := mqtt.New(pahoClient)
-	if err := mqttSvc.Connect(); err != nil {
+	conn, err := pgx.Connect(ctx, os.Getenv("DATABASE_URL"))
+	if err != nil {
+		return err
+	}
+	defer conn.Close(ctx)
+	db := database.NewDatabase(ctx, conn)
+
+	if err := publisher.RegisterPublisher("postgres", db); err != nil {
 		return err
 	}
 
-	winetSvc := winet.New(cfg.WinetCfg, mqttSvc, errorChan)
+	winetSvc := winet.New(cfg.WinetCfg, errorChan)
+
+	eg.Go(func() error {
+		return cronDbCleanup(db)
+	})
 
 	eg.Go(func() error {
 		return winetSvc.Connect(ctx)
 	})
 
 	eg.Go(func() error {
-		// CRON automation
-		c := cron.New()
-		c.AddFunc("CRON_TZ=Australia/Adelaide 1 17 * * *", func() {
-			time.Sleep(time.Second)
-			// enable feedin
-			if _, err := winetSvc.SetFeedInLimitation(false); err != nil {
-				logger.Error(err.Error())
-			}
-			// discharge batter at 1.6Kw/h
-			if _, err := winetSvc.SendDischargeCommand("1.6"); err != nil {
-				logger.Error(err.Error())
-			}
-			logger.Info("automated discharge of battery")
-		})
-
-		c.AddFunc("CRON_TZ=Australia/Adelaide 1 21 * * *", func() {
-			time.Sleep(time.Second)
-			// enable feedin
-			if _, err := winetSvc.SetFeedInLimitation(true); err != nil {
-				logger.Error(err.Error())
-			}
-			// stop discharge
-			if _, err := winetSvc.SendSelfConsumptionCommand(); err != nil {
-				logger.Error(err.Error())
-			}
-			logger.Info("automated consumption of battery and disable feedin")
-		})
-		c.Run()
-		return nil
-	})
-
-	eg.Go(func() error {
 		srv := &http.Server{
-			Handler: api.HandlerWithOptions(server.New(winetSvc), api.GorillaServerOptions{
+			Handler: api.HandlerWithOptions(server.New(winetSvc, db), api.GorillaServerOptions{
 				Middlewares: []api.MiddlewareFunc{server.LoggingMiddleware},
 			}),
 			Addr:         "127.0.0.1:8000",
@@ -131,4 +112,25 @@ func run(ctx context.Context, cfg *config.Config) error {
 	})
 
 	return eg.Wait()
+}
+
+func cronDbCleanup(db *database.Database) error {
+	if err := db.Cleanup(context.Background()); err != nil {
+		return err
+	}
+
+	// CRON automation
+	c := cron.New()
+	if _, err := c.AddFunc("CRON_TZ=Australia/Adelaide 0 3 * * *", func() {
+		if err := db.Cleanup(context.Background()); err != nil {
+			zap.L().Error("error cleaning up database", zap.Error(err))
+			return
+		}
+		zap.L().Info("automated discharge of battery")
+	}); err != nil {
+		return err
+	}
+
+	c.Run()
+	return nil
 }

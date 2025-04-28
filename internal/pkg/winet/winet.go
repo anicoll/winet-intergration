@@ -15,31 +15,25 @@ import (
 
 const EnglishLang string = "en_us"
 
-type publisher interface {
-	PublishData(deviceStatusMap map[model.Device][]model.DeviceStatus) error
-	RegisterDevice(device *model.Device) error
-}
-
 type service struct {
-	cfg           *config.WinetConfig
-	properties    map[string]string
-	conn          ws.Connection
-	errChan       chan error
-	token         string
-	logger        *zap.Logger
-	storedData    []byte
-	publisher     publisher
+	cfg        *config.WinetConfig
+	properties map[string]string
+	conn       ws.Connection
+	errChan    chan error
+	token      string
+	logger     *zap.Logger
+	storedData []byte
+
 	currentDevice *model.Device
 	processed     chan any // used to communicate when messages are processed.
 }
 
-func New(cfg *config.WinetConfig, publisher publisher, errChan chan error) *service {
+func New(cfg *config.WinetConfig, errChan chan error) *service {
 	return &service{
 		cfg:        cfg,
 		errChan:    errChan,
 		logger:     zap.L(), // returns the global logger.
 		storedData: []byte{},
-		publisher:  publisher,
 		processed:  make(chan any),
 	}
 }
@@ -98,8 +92,16 @@ func (s *service) onMessage(data []byte, c ws.Connection) {
 	}
 
 	s.logger.Debug("received message", zap.String("result", result.ResultMessage), zap.String("query_stage", result.ResultData.Service.String()))
-	if result.ResultMessage != "success" {
+	if result.ResultMessage == "login timeout" {
+		// do we need to control is from here?
+		s.logger.Debug("login timeout, reconnecting")
 		s.reconnect()
+		return
+	}
+
+	if result.ResultMessage == "normal user limit" {
+		s.logger.Debug("normal user limit reached.")
+		return
 	}
 
 	switch result.ResultData.Service {
@@ -117,15 +119,12 @@ func (s *service) onMessage(data []byte, c ws.Connection) {
 		go s.handleDirectMessage(data)
 	case model.Real, model.RealBattery:
 		go s.handleRealMessage(data)
-	case model.Statistics:
-	default:
-		s.reconnect()
 	}
 }
 
 func (s *service) onError(err error) {
 	if errors.Is(err, io.EOF) {
-		err = s.reconnect()
+		return
 	}
 	s.sendIfErr(err)
 }
