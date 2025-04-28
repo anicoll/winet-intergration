@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"time"
@@ -77,7 +78,16 @@ func run(ctx context.Context, cfg *config.Config) error {
 	})
 
 	eg.Go(func() error {
-		return winetSvc.Connect(ctx)
+		for {
+			winetSvc = winet.New(cfg.WinetCfg, errorChan)
+			if err := winetSvc.Connect(ctx); err != nil {
+				return err
+			}
+			if err := <-winetSvc.SubscribeToTimeout(); errors.Is(err, winet.ErrTimeout) {
+				logger.Error("timeout error", zap.Error(err))
+				continue
+			}
+		}
 	})
 
 	eg.Go(func() error {
@@ -85,7 +95,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 			Handler: api.HandlerWithOptions(server.New(winetSvc, db), api.GorillaServerOptions{
 				Middlewares: []api.MiddlewareFunc{server.LoggingMiddleware},
 			}),
-			Addr:         "127.0.0.1:8000",
+			Addr:         "0.0.0.0:8000",
 			WriteTimeout: 15 * time.Second,
 			ReadTimeout:  15 * time.Second,
 		}
@@ -95,14 +105,15 @@ func run(ctx context.Context, cfg *config.Config) error {
 
 	eg.Go(func() error {
 		// handle any async errors from service
-		select {
-		case err := <-errorChan:
-			logger.Error(err.Error())
-		case <-ctx.Done():
-			logger.Info("context done")
-			return nil
+		for {
+			select {
+			case err := <-errorChan:
+				logger.Error(err.Error())
+			case <-ctx.Done():
+				logger.Info("context done")
+				return ctx.Err()
+			}
 		}
-		return nil
 	})
 
 	return eg.Wait()
