@@ -111,9 +111,6 @@ func (s *service) onMessage(data []byte, c ws.Connection) {
 		go s.handleDirectMessage(data)
 	case model.Real, model.RealBattery:
 		go s.handleRealMessage(data)
-	case model.Statistics:
-	default:
-		s.reconnect()
 	}
 }
 
