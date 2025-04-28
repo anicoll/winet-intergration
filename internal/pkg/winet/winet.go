@@ -92,8 +92,16 @@ func (s *service) onMessage(data []byte, c ws.Connection) {
 	}
 
 	s.logger.Debug("received message", zap.String("result", result.ResultMessage), zap.String("query_stage", result.ResultData.Service.String()))
-	if result.ResultMessage != "success" {
+	if result.ResultMessage == "login timeout" {
+		// do we need to control is from here?
+		s.logger.Debug("login timeout, reconnecting")
 		s.reconnect()
+		return
+	}
+
+	if result.ResultMessage == "normal user limit" {
+		s.logger.Debug("normal user limit reached.")
+		return
 	}
 
 	switch result.ResultData.Service {
@@ -116,7 +124,7 @@ func (s *service) onMessage(data []byte, c ws.Connection) {
 
 func (s *service) onError(err error) {
 	if errors.Is(err, io.EOF) {
-		err = s.reconnect()
+		return
 	}
 	s.sendIfErr(err)
 }
