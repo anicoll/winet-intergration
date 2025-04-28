@@ -17,7 +17,6 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	// paho_mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 func WinetCommand(ctx *cli.Context) error {
@@ -59,11 +58,6 @@ func run(ctx context.Context, cfg *config.Config) error {
 		_ = logger.Sync() // flushes buffer, if any.
 	}()
 	zap.ReplaceGlobals(logger)
-	// mqttOpts := paho_mqtt.NewClientOptions()
-	// mqttOpts.SetPassword(cfg.MqttCfg.Password)
-	// mqttOpts.SetUsername(cfg.MqttCfg.Username)
-	// mqttOpts.AddBroker(cfg.MqttCfg.Host)
-	// pahoClient := paho_mqtt.NewClient(mqttOpts)
 
 	conn, err := pgx.Connect(ctx, os.Getenv("DATABASE_URL"))
 	if err != nil {

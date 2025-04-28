@@ -1,0 +1,23 @@
+name: Docker Builder
+
+on:
+  push:
+    branches: master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+      # https://github.com/docker/setup-qemu-action
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      # https://github.com/docker/setup-buildx-action
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: build the image
+        run: |
+          docker buildx build \
+            --tag android101/winet-s:latest \
+            --platform linux/amd64,linux/arm/v7,linux/arm64 .

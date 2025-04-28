@@ -8,6 +8,7 @@ require (
 	github.com/getkin/kin-openapi v0.131.0
 	github.com/gorilla/mux v1.8.1
 	github.com/gosimple/slug v1.15.0
+	github.com/jackc/pgx/v5 v5.7.4
 	github.com/oapi-codegen/oapi-codegen/v2 v2.4.1
 	github.com/oapi-codegen/runtime v1.1.1
 	github.com/robfig/cron/v3 v3.0.1
@@ -27,7 +28,6 @@ require (
 	github.com/gosimple/unidecode v1.0.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.7.4 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
