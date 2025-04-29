@@ -27,7 +27,7 @@ func (db *Database) GetProperties(ctx context.Context, identifier, slug string, 
 	ORDER BY time_stamp DESC;
 	`
 
-	rows, err := db.conn.Query(ctx, query, identifier, slug, from, to)
+	rows, err := db.pool.Query(ctx, query, identifier, slug, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func (db *Database) GetLatestProperties(ctx context.Context) (model.Properties, 
 	ORDER BY slug, time_stamp DESC;
 	`
 
-	rows, err := db.conn.Query(ctx, query)
+	rows, err := db.pool.Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (db *Database) GetAmberPrices(ctx context.Context, from, to time.Time, site
 	ORDER BY start_time DESC;
 	`
 
-	rows, err := db.conn.Query(ctx, query, from, to)
+	rows, err := db.pool.Query(ctx, query, from, to)
 	if err != nil {
 		return nil, err
 	}

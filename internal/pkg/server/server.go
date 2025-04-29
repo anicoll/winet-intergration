@@ -35,6 +35,7 @@ type server struct {
 	winets winetService
 	db     database
 	logger *zap.Logger
+	loc    *time.Location
 }
 
 func New(ws winetService, db database) *server {
@@ -42,12 +43,13 @@ func New(ws winetService, db database) *server {
 		winets: ws,
 		logger: zap.L(),
 		db:     db,
+		loc:    time.Now().Location(),
 	}
 }
 
 func (s *server) GetAmberPricesFromTo(w http.ResponseWriter, r *http.Request, from time.Time, to time.Time, params api.GetAmberPricesFromToParams) {
 	ctx := r.Context()
-	amberPrices, err := s.db.GetAmberPrices(ctx, from, to, params.Site)
+	amberPrices, err := s.db.GetAmberPrices(ctx, from.In(s.loc), to.In(s.loc), params.Site)
 	if err != nil {
 		handleError(w, err)
 		return

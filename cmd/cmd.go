@@ -15,7 +15,7 @@ import (
 	"github.com/anicoll/winet-integration/internal/pkg/server"
 	"github.com/anicoll/winet-integration/internal/pkg/winet"
 	api "github.com/anicoll/winet-integration/pkg/server"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/robfig/cron/v3"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
@@ -62,12 +62,13 @@ func run(ctx context.Context, cfg *config.Config) error {
 	}()
 	zap.ReplaceGlobals(logger)
 
-	conn, err := pgx.Connect(ctx, os.Getenv("DATABASE_URL"))
+	pool, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
 	if err != nil {
 		return err
 	}
-	defer conn.Close(ctx)
-	db := database.NewDatabase(ctx, conn)
+
+	defer pool.Close()
+	db := database.NewDatabase(ctx, pool)
 
 	if err := publisher.RegisterPublisher("postgres", db); err != nil {
 		return err
@@ -146,7 +147,7 @@ func cronDbCleanup(db *database.Database, errChan chan error) error {
 			errChan <- errCron
 			return
 		}
-		zap.L().Info("automated discharge of battery")
+		zap.L().Info("cleanup of database completed")
 	}); err != nil {
 		return err
 	}
@@ -183,7 +184,7 @@ func processAmberPrices(ctx context.Context, db *database.Database, errChan chan
 			errChan <- errCron
 			return
 		}
-		zap.L().Info("automated discharge of battery")
+		zap.L().Info("amber prices updated")
 	}); err != nil {
 		return err
 	}

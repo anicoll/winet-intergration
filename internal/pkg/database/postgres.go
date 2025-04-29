@@ -2,24 +2,22 @@ package database
 
 import (
 	"context"
-	"io"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Database struct {
-	conn *pgx.Conn
-	io.Closer
+	pool *pgxpool.Pool
 }
 
-func NewDatabase(ctx context.Context, conn *pgx.Conn) *Database {
-	initialise(ctx, conn)
+func NewDatabase(ctx context.Context, pool *pgxpool.Pool) *Database {
+	initialise(ctx, pool)
 	return &Database{
-		conn: conn,
+		pool: pool,
 	}
 }
 
-func initialise(ctx context.Context, conn *pgx.Conn) {
+func initialise(ctx context.Context, pool *pgxpool.Pool) {
 	const createPropertiesTableSQL = `
 		CREATE TABLE IF NOT EXISTS Property (
 				id 					SERIAL PRIMARY KEY,
@@ -32,7 +30,7 @@ func initialise(ctx context.Context, conn *pgx.Conn) {
 		CREATE INDEX IF NOT EXISTS idx_properties_identifier ON Property (identifier);
 		CREATE INDEX IF NOT EXISTS idx_properties_timestamp ON Property (time_stamp);
 		`
-	if _, err := conn.Exec(ctx, createPropertiesTableSQL); err != nil {
+	if _, err := pool.Exec(ctx, createPropertiesTableSQL); err != nil {
 		panic(err)
 	}
 
@@ -44,7 +42,7 @@ func initialise(ctx context.Context, conn *pgx.Conn) {
 		created_at 		TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);
 	`
-	if _, err := conn.Exec(ctx, createDeviceTableSQL); err != nil {
+	if _, err := pool.Exec(ctx, createDeviceTableSQL); err != nil {
 		panic(err)
 	}
 
@@ -65,14 +63,7 @@ func initialise(ctx context.Context, conn *pgx.Conn) {
 	CREATE INDEX IF NOT EXISTS idx_amber_price_end_time ON AmberPrice (end_time);
 	CREATE UNIQUE INDEX IF NOT EXISTS idx_amber_price_unique_start_time_channel_type ON AmberPrice (start_time, channel_type);
 	`
-	if _, err := conn.Exec(ctx, createAmberPriceTableSQL); err != nil {
+	if _, err := pool.Exec(ctx, createAmberPriceTableSQL); err != nil {
 		panic(err)
 	}
-}
-
-func (db *Database) Close() error {
-	if db.conn == nil {
-		return nil
-	}
-	return db.conn.Close(context.Background())
 }

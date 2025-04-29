@@ -61,8 +61,8 @@ func (c *client) GetSites() []ac.Site {
 
 func (c *client) GetPrices(ctx context.Context, siteID string) (model.AmberPrices, error) {
 	response, err := c.aClient.GetCurrentPricesWithResponse(ctx, siteID, &ac.GetCurrentPricesParams{
-		Next:     utils.ToPtr(10),
-		Previous: utils.ToPtr(5),
+		Next:     utils.ToPtr(200),
+		Previous: utils.ToPtr(10),
 	}, withToken(c.apiToken))
 	if err != nil {
 		return nil, err
