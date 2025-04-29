@@ -32,6 +32,25 @@ const (
 	On  ChangeInverterStatePayloadState = "on"
 )
 
+// AmberPrice defines model for AmberPrice.
+type AmberPrice struct {
+	// ChannelType indicates if the price is feedin or general.
+	ChannelType string    `json:"channelType"`
+	CreatedAt   time.Time `json:"createdAt"`
+
+	// Duration duration in minutes
+	Duration int       `json:"duration"`
+	EndTime  time.Time `json:"endTime"`
+
+	// Forecast indicates if the price is a forecast price or not.
+	Forecast   bool      `json:"forecast"`
+	Id         int       `json:"id"`
+	PerKwh     float32   `json:"perKwh"`
+	SpotPerKwh float32   `json:"spotPerKwh"`
+	StartTime  time.Time `json:"startTime"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+}
+
 // ChangeBatteryStatePayload defines model for ChangeBatteryStatePayload.
 type ChangeBatteryStatePayload struct {
 	Power *string                        `json:"power,omitempty"`
@@ -67,6 +86,11 @@ type Property struct {
 	Value             *string    `json:"value,omitempty"`
 }
 
+// GetAmberPricesFromToParams defines parameters for GetAmberPricesFromTo.
+type GetAmberPricesFromToParams struct {
+	Site *string `form:"site,omitempty" json:"site,omitempty"`
+}
+
 // GetPropertyIdentifierSlugParams defines parameters for GetPropertyIdentifierSlug.
 type GetPropertyIdentifierSlugParams struct {
 	From *time.Time `form:"from,omitempty" json:"from,omitempty"`
@@ -84,6 +108,9 @@ type PostInverterStateJSONRequestBody = ChangeInverterStatePayload
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+
+	// (GET /amber/prices/{from}/{to})
+	GetAmberPricesFromTo(w http.ResponseWriter, r *http.Request, from time.Time, to time.Time, params GetAmberPricesFromToParams)
 
 	// (POST /battery/{state})
 	PostBatteryState(w http.ResponseWriter, r *http.Request, state string)
@@ -109,6 +136,51 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// GetAmberPricesFromTo operation middleware
+func (siw *ServerInterfaceWrapper) GetAmberPricesFromTo(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "from" -------------
+	var from time.Time
+
+	err = runtime.BindStyledParameterWithOptions("simple", "from", mux.Vars(r)["from"], &from, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "to" -------------
+	var to time.Time
+
+	err = runtime.BindStyledParameterWithOptions("simple", "to", mux.Vars(r)["to"], &to, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAmberPricesFromToParams
+
+	// ------------- Optional query parameter "site" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "site", r.URL.Query(), &params.Site)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "site", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAmberPricesFromTo(w, r, from, to, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // PostBatteryState operation middleware
 func (siw *ServerInterfaceWrapper) PostBatteryState(w http.ResponseWriter, r *http.Request) {
@@ -354,6 +426,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	r.HandleFunc(options.BaseURL+"/amber/prices/{from}/{to}", wrapper.GetAmberPricesFromTo).Methods("GET")
+
 	r.HandleFunc(options.BaseURL+"/battery/{state}", wrapper.PostBatteryState).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/inverter/feedin", wrapper.PostInverterFeedin).Methods("POST")
@@ -370,19 +444,24 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"AAD//8deE7D5EQAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

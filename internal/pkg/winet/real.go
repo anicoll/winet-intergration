@@ -14,6 +14,7 @@ import (
 )
 
 func (s *service) handleRealMessage(data []byte) {
+	s.logger.Debug("handleRealMessage")
 	res := model.ParsedResult[model.GenericReponse[model.GenericUnit]]{}
 	err := json.Unmarshal(data, &res)
 	s.sendIfErr(err)

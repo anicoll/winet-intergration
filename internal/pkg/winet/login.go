@@ -3,8 +3,8 @@ package winet
 import (
 	"encoding/json"
 
-	ws "github.com/anicoll/evtwebsocket"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
+	ws "github.com/anicoll/winet-integration/pkg/sockets"
 	"go.uber.org/zap"
 )
 
@@ -33,5 +33,6 @@ func (s *service) handleLoginMessage(data []byte, c ws.Connection) {
 	err := json.Unmarshal(data, &loginRes)
 	s.sendIfErr(err)
 	s.token = loginRes.ResultData.Token
+	s.processed = make(chan any) // recreate the channel to signal when we are done.
 	s.sendDeviceListRequest(c)
 }

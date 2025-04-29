@@ -11,6 +11,7 @@ import (
 )
 
 func (s *service) handleDirectMessage(data []byte) {
+	s.logger.Debug("handleDirectMessage")
 	res := model.ParsedResult[model.GenericReponse[model.DirectUnit]]{}
 	err := json.Unmarshal(data, &res)
 	s.sendIfErr(err)

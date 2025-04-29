@@ -15,6 +15,37 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Property"
+  /amber/prices/{from}/{to}:
+    get:
+      parameters:
+        - name: site
+          in: query
+          required: false
+          default: "default"
+          schema:
+            type: string
+        - name: from
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date-time
+            example: "2023-10-01T12:00:00Z"
+        - name: to
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: returns amber prices.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AmberPrice"
   /property/{identifier}/{slug}:
     get:
       parameters:
@@ -147,6 +178,58 @@ components:
         disable:
           type: boolean
           example: true
+    AmberPrice:
+      type: object
+      required:
+        - id
+        - duration
+        - forecast
+        - channelType
+        - createdAt
+        - updatedAt
+        - endTime
+        - startTime
+        - spotPerKwh
+        - perKwh
+      properties:
+        id:
+          type: integer
+          example: 1
+        duration:
+          type: integer
+          example: 5
+          description: duration in minutes
+        forecast:
+          type: boolean
+          example: true
+          description: indicates if the price is a forecast price or not.
+        channelType:
+          type: string
+          example: "general"
+          description: indicates if the price is feedin or general.
+        createdAt:
+          type: string
+          format: date-time
+          example: "2023-10-01T12:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2023-10-01T12:00:00Z"
+        endTime:
+          type: string
+          format: date-time
+          example: "2023-10-01T12:00:00Z"
+        startTime:
+          type: string
+          format: date-time
+          example: "2023-10-01T12:00:00Z"
+        perKwh:
+          type: number
+          example: 0.1234
+        spotPerKwh:
+          type: number
+          example: 0.1234
+        
     Property:
       type: object
       required:

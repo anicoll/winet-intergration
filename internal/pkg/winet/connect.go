@@ -3,8 +3,8 @@ package winet
 import (
 	"encoding/json"
 
-	ws "github.com/anicoll/evtwebsocket"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
+	ws "github.com/anicoll/winet-integration/pkg/sockets"
 	"go.uber.org/zap"
 )
 

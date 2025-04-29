@@ -36,3 +36,40 @@ func (d *Database) RegisterDevice(device *model.Device) error {
 
 	return nil
 }
+
+func (db *Database) WriteProperty(ctx context.Context, prop model.Property) error {
+	const insertSQL = `
+	INSERT INTO Property (time_stamp, unit_of_measurement, value, identifier, slug)
+	VALUES ($1, $2, $3, $4, $5)
+	`
+	if _, err := db.conn.Exec(ctx, insertSQL, prop.TimeStamp, prop.Unit, prop.Value, prop.Identifier, prop.Slug); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *Database) WriteAmberPrices(ctx context.Context, prices model.AmberPrices) error {
+	tx, err := d.conn.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	for _, price := range prices {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO AmberPrice (per_kwh, spot_per_kwh, start_time, end_time, duration, forecast, channel_type)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			ON CONFLICT (start_time, channel_type) DO UPDATE
+			SET per_kwh = EXCLUDED.per_kwh,
+				spot_per_kwh = EXCLUDED.spot_per_kwh,
+				duration = EXCLUDED.duration,
+				forecast = EXCLUDED.forecast,
+				channel_type = EXCLUDED.channel_type,
+				updated_at = NOW()
+		`, price.PerKwh, price.SpotPerKwh, price.StartTime, price.EndTime, price.Duration, price.Forecast, price.ChannelType); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
+}
