@@ -5,8 +5,10 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/anicoll/winet-integration/internal/pkg/amber"
 	"github.com/anicoll/winet-integration/internal/pkg/config"
 	"github.com/anicoll/winet-integration/internal/pkg/database"
 	"github.com/anicoll/winet-integration/internal/pkg/publisher"
@@ -74,7 +76,11 @@ func run(ctx context.Context, cfg *config.Config) error {
 	winetSvc := winet.New(cfg.WinetCfg, errorChan)
 
 	eg.Go(func() error {
-		return cronDbCleanup(db)
+		return cronDbCleanup(db, errorChan)
+	})
+
+	eg.Go(func() error {
+		return processAmberPrices(ctx, db, errorChan)
 	})
 
 	eg.Go(func() error {
@@ -108,7 +114,13 @@ func run(ctx context.Context, cfg *config.Config) error {
 		for {
 			select {
 			case err := <-errorChan:
-				logger.Error(err.Error())
+				if errors.Is(err, errCron) {
+					logger.Error("cron error", zap.Error(err))
+					return err
+				}
+				if strings.Contains(err.Error(), "failed to deallocate") {
+					return err
+				}
 			case <-ctx.Done():
 				logger.Info("context done")
 				return ctx.Err()
@@ -119,7 +131,9 @@ func run(ctx context.Context, cfg *config.Config) error {
 	return eg.Wait()
 }
 
-func cronDbCleanup(db *database.Database) error {
+var errCron = errors.New("cron error")
+
+func cronDbCleanup(db *database.Database, errChan chan error) error {
 	if err := db.Cleanup(context.Background()); err != nil {
 		return err
 	}
@@ -129,6 +143,7 @@ func cronDbCleanup(db *database.Database) error {
 	if _, err := c.AddFunc("CRON_TZ=Australia/Adelaide 0 3 * * *", func() {
 		if err := db.Cleanup(context.Background()); err != nil {
 			zap.L().Error("error cleaning up database", zap.Error(err))
+			errChan <- errCron
 			return
 		}
 		zap.L().Info("automated discharge of battery")
@@ -138,4 +153,41 @@ func cronDbCleanup(db *database.Database) error {
 
 	c.Run()
 	return nil
+}
+
+func processAmberPrices(ctx context.Context, db *database.Database, errChan chan error) error {
+	svc, err := amber.New(ctx, os.Getenv("AMBER_HOST"), os.Getenv("AMBER_TOKEN"))
+	if err != nil {
+		return err
+	}
+	site := svc.GetSites()[0]
+
+	prices, err := svc.GetPrices(ctx, site.Id)
+	if err != nil {
+		return err
+	}
+
+	if err := db.WriteAmberPrices(ctx, prices); err != nil {
+		return err
+	}
+
+	c := cron.New()
+	if _, err := c.AddFunc("CRON_TZ=Australia/Adelaide */5 * * * *", func() {
+		time.Sleep(5 * time.Second) // just to ensure we get the latest prices.
+		prices, err = svc.GetPrices(ctx, site.Id)
+		if err != nil {
+			errChan <- errCron
+			return
+		}
+		if err = db.WriteAmberPrices(ctx, prices); err != nil {
+			errChan <- errCron
+			return
+		}
+		zap.L().Info("automated discharge of battery")
+	}); err != nil {
+		return err
+	}
+
+	c.Run()
+	return err
 }
