@@ -5,7 +5,7 @@ go 1.23.6
 require (
 	github.com/anicoll/evtwebsocket v0.1.1
 	github.com/eclipse/paho.mqtt.golang v1.5.0
-	github.com/getkin/kin-openapi v0.131.0
+	github.com/getkin/kin-openapi v0.132.0
 	github.com/gorilla/mux v1.8.1
 	github.com/gosimple/slug v1.15.0
 	github.com/jackc/pgx/v5 v5.7.4
