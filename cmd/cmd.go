@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/anicoll/winet-integration/internal/pkg/amber"
@@ -85,26 +84,32 @@ func run(ctx context.Context, cfg *config.Config) error {
 	})
 
 	eg.Go(func() error {
+		var err error
 		for {
 			winetSvc = winet.New(cfg.WinetCfg, errorChan)
-			if err := winetSvc.Connect(ctx); err != nil {
-				return err
+			if err = winetSvc.Connect(ctx); err != nil {
+				logger.Error("winetSvc.Connect error", zap.Error(err))
+				break
 			}
-			if err := <-winetSvc.SubscribeToTimeout(); errors.Is(err, winet.ErrTimeout) {
+			if err = <-winetSvc.SubscribeToTimeout(); errors.Is(err, winet.ErrTimeout) {
 				logger.Error("timeout error", zap.Error(err))
 				continue
 			}
 		}
+		return err
 	})
 
 	eg.Go(func() error {
 		srv := &http.Server{
 			Handler: api.HandlerWithOptions(server.New(winetSvc, db), api.GorillaServerOptions{
-				Middlewares: []api.MiddlewareFunc{server.LoggingMiddleware},
+				Middlewares: []api.MiddlewareFunc{server.TimeoutMiddleware, server.LoggingMiddleware},
+				ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+					panic(err)
+				},
 			}),
 			Addr:         "0.0.0.0:8000",
-			WriteTimeout: 15 * time.Second,
-			ReadTimeout:  15 * time.Second,
+			WriteTimeout: 5 * time.Second,
+			ReadTimeout:  5 * time.Second,
 		}
 
 		return srv.ListenAndServe()
@@ -117,14 +122,12 @@ func run(ctx context.Context, cfg *config.Config) error {
 			case err := <-errorChan:
 				if errors.Is(err, errCron) {
 					logger.Error("cron error", zap.Error(err))
-					return err
 				}
-				if strings.Contains(err.Error(), "failed to deallocate") {
-					return err
-				}
+				return err
 			case <-ctx.Done():
-				logger.Info("context done")
-				return ctx.Err()
+				err = ctx.Err()
+				logger.Error("context done", zap.Error(err))
+				return err
 			}
 		}
 	})

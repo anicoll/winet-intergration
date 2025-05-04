@@ -99,6 +99,8 @@ func (s *service) onMessage(data []byte, c ws.Connection) {
 		// do we need to control is from here?
 		s.logger.Debug("login timeout, reconnecting")
 		s.timeoutErrChan <- ErrTimeout
+		err := s.reconnect(context.Background())
+		s.onError(err)
 		return
 	}
 
@@ -132,7 +134,7 @@ func (s *service) onError(err error) {
 	s.sendIfErr(err)
 }
 
-func (s *service) reconnect() error {
+func (s *service) reconnect(ctx context.Context) error {
 	var u url.URL
 	if s.cfg.Ssl {
 		u = url.URL{Scheme: "wss", Host: s.cfg.Host + ":443", Path: "/ws/home/overview"}
@@ -153,7 +155,7 @@ func (s *service) reconnect() error {
 		ws.WithPingMsg([]byte("ping")),
 	)
 
-	if err := s.conn.Dial(context.Background(), u.String(), ""); err != nil {
+	if err := s.conn.Dial(ctx, u.String(), ""); err != nil {
 		s.logger.Error("failed to connect to", zap.String("url", u.String()), zap.Error(err))
 		return err
 	}
@@ -166,7 +168,7 @@ func (s *service) Connect(ctx context.Context) error {
 		s.logger.Error("failed to get properties", zap.Error(err))
 		return err
 	}
-	return s.reconnect()
+	return s.reconnect(ctx)
 }
 
 func (s *service) SubscribeToTimeout() chan error {
