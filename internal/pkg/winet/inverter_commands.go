@@ -162,6 +162,52 @@ func (s *service) SendChargeCommand(chargePower string) (bool, error) {
 	return result.ResultMessage == "success", nil
 }
 
+func (s *service) SendBatteryStopCommand() (bool, error) {
+	nowTime := fmt.Sprintf("%d", time.Now().UnixMilli())
+	data, err := json.Marshal(model.InverterUpdateRequest{
+		Request: model.Request{
+			Lang:    EnglishLang,
+			Service: model.Param.String(),
+			Token:   s.token,
+		},
+		Time:           nowTime,
+		ParkSerial:     nowTime,
+		DevCode:        3344,
+		DevType:        model.DeviceTypeInverter,
+		DevIDArray:     []string{"1"},
+		Type:           "9",
+		Count:          "1",
+		CurrentPackNum: 1,
+		PackNumTotal:   1,
+		List: []model.InverterParamRequest{
+			{
+				Accuracy:   0,
+				ParamAddr:  33146,
+				ParamID:    1,
+				ParamName:  "Energy Management Mode",
+				ParamType:  1,
+				ParamValue: "2",
+			},
+			{
+				Accuracy:   0,
+				ParamAddr:  33147,
+				ParamID:    2,
+				ParamName:  "Charging/Discharging Command",
+				ParamType:  1,
+				ParamValue: "204",
+			},
+		},
+	})
+	s.sendIfErr(err)
+	s.sendIfErr(s.conn.Send(ws.Msg{
+		Body: data,
+	}))
+	res := s.waiter()
+	result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
+	s.logger.Info("SendBatteryStopCommand", zap.Any("any", res))
+	return result.ResultMessage == "success", nil
+}
+
 func (s *service) SendInverterStateChangeCommand(disable bool) (bool, error) {
 	data, err := json.Marshal(model.DisableInverterRequest{
 		Request: model.Request{

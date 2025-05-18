@@ -158,6 +158,7 @@ components:
             - self_consumption
             - charge
             - discharge
+            - stop
     ChangeInverterStatePayload:
       type: object
       required:
@@ -229,7 +230,7 @@ components:
         spotPerKwh:
           type: number
           example: 0.1234
-        
+
     Property:
       type: object
       required:

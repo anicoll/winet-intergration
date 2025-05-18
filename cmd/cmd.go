@@ -89,14 +89,13 @@ func run(ctx context.Context, cfg *config.Config) error {
 			winetSvc = winet.New(cfg.WinetCfg, errorChan)
 			if err = winetSvc.Connect(ctx); err != nil {
 				logger.Error("winetSvc.Connect error", zap.Error(err))
-				break
+				return err
 			}
 			if err = <-winetSvc.SubscribeToTimeout(); errors.Is(err, winet.ErrTimeout) {
 				logger.Error("timeout error", zap.Error(err))
 				continue
 			}
 		}
-		return err
 	})
 
 	eg.Go(func() error {
@@ -127,6 +126,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 			case <-ctx.Done():
 				err = ctx.Err()
 				logger.Error("context done", zap.Error(err))
+				os.Exit(2)
 				return err
 			}
 		}

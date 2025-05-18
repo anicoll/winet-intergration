@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/anicoll/winet-integration/internal/pkg/model"
@@ -40,6 +42,18 @@ func New(ctx context.Context, server, token string) (*client, error) {
 		apiToken: token,
 		loc:      time.Now().Location(),
 	}
+	if sites := os.Getenv("AMBER_SITES"); sites != "" {
+		siteIDs := strings.Split(sites, ",")
+		for _, siteID := range siteIDs {
+			amberClient.sites = append(amberClient.sites, ac.Site{
+				Id: siteID,
+			})
+			zap.L().Info("configured site", zap.Any("site", siteID))
+
+		}
+		return amberClient, nil
+	}
+
 	siteResponse, err := c.GetSitesWithResponse(ctx, withToken(token))
 	if err != nil {
 		return nil, err

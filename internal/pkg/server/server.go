@@ -17,6 +17,7 @@ var _ api.ServerInterface = (*server)(nil)
 
 type winetService interface {
 	SendSelfConsumptionCommand() (bool, error)
+	SendBatteryStopCommand() (bool, error)
 	SetFeedInLimitation(feedinLimited bool) (bool, error)
 	// like 6.6
 	SendDischargeCommand(dischargePower string) (bool, error)
@@ -138,6 +139,15 @@ func (s *server) changeBatteryState(req *api.ChangeBatteryStatePayload) error {
 		}
 		if !success {
 			return errors.New("failed to send discharge command")
+		}
+	case api.Stop:
+		s.logger.Info("switching battery to", zap.String("state", string(req.State)))
+		success, err := s.winets.SendBatteryStopCommand()
+		if err != nil {
+			return err
+		}
+		if !success {
+			return errors.New("failed to send battery stop command")
 		}
 	case api.Charge:
 		if req.Power == nil {
