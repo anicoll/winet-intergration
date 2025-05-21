@@ -6,13 +6,14 @@ import (
 	"strconv"
 	"time"
 
-	ws "github.com/anicoll/evtwebsocket"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
 	"github.com/anicoll/winet-integration/internal/pkg/publisher"
+	ws "github.com/anicoll/winet-integration/pkg/sockets"
 	"go.uber.org/zap"
 )
 
 func (s *service) handleDeviceListMessage(data []byte, c ws.Connection) {
+	s.logger.Debug("handleDeviceListMessage")
 	res := model.ParsedResult[model.GenericReponse[model.DeviceListObject]]{}
 	err := json.Unmarshal(data, &res)
 	s.sendIfErr(err)
@@ -31,7 +32,7 @@ func (s *service) handleDeviceListMessage(data []byte, c ws.Connection) {
 		s.sendIfErr(err)
 		s.logger.Debug("detected device", zap.Any("device", device), zap.Error(err))
 		for _, qs := range model.DeviceStages[device.DevType] {
-			s.logger.Debug("querying for device", zap.Any("device", device))
+			s.logger.Debug("querying for device", zap.Any("device", device), zap.String("query_stage", qs.String()), zap.String("token", s.token))
 			requestData, err := json.Marshal(model.RealRequest{
 				DeviceID: fmt.Sprintf("%d", device.DeviceID),
 				Time:     fmt.Sprintf("%d", time.Now().UnixMilli()),

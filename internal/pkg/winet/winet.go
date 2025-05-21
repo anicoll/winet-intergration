@@ -7,22 +7,25 @@ import (
 	"io"
 	"net/url"
 
-	ws "github.com/anicoll/evtwebsocket"
 	"github.com/anicoll/winet-integration/internal/pkg/config"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
+	ws "github.com/anicoll/winet-integration/pkg/sockets"
 	"go.uber.org/zap"
 )
+
+var ErrTimeout = errors.New("timeout")
 
 const EnglishLang string = "en_us"
 
 type service struct {
-	cfg        *config.WinetConfig
-	properties map[string]string
-	conn       ws.Connection
-	errChan    chan error
-	token      string
-	logger     *zap.Logger
-	storedData []byte
+	cfg            *config.WinetConfig
+	properties     map[string]string
+	conn           ws.Connection
+	errChan        chan error
+	timeoutErrChan chan error
+	token          string
+	logger         *zap.Logger
+	storedData     []byte
 
 	currentDevice *model.Device
 	processed     chan any // used to communicate when messages are processed.
@@ -49,7 +52,7 @@ func (s *service) onconnect(c ws.Connection) {
 	s.logger.Debug("onconnect ws received")
 	data, err := json.Marshal(model.ConnectRequest{
 		Request: model.Request{
-			Lang:    "en_us",
+			Lang:    EnglishLang,
 			Service: model.Connect.String(),
 			Token:   s.token,
 		},
@@ -95,7 +98,9 @@ func (s *service) onMessage(data []byte, c ws.Connection) {
 	if result.ResultMessage == "login timeout" {
 		// do we need to control is from here?
 		s.logger.Debug("login timeout, reconnecting")
-		s.reconnect()
+		s.timeoutErrChan <- ErrTimeout
+		err := s.reconnect(context.Background())
+		s.onError(err)
 		return
 	}
 
@@ -129,7 +134,7 @@ func (s *service) onError(err error) {
 	s.sendIfErr(err)
 }
 
-func (s *service) reconnect() error {
+func (s *service) reconnect(ctx context.Context) error {
 	var u url.URL
 	if s.cfg.Ssl {
 		u = url.URL{Scheme: "wss", Host: s.cfg.Host + ":443", Path: "/ws/home/overview"}
@@ -146,12 +151,11 @@ func (s *service) reconnect() error {
 		ws.OnMessage(s.onMessage),
 		ws.OnError(s.onError),
 		ws.InsecureSkipVerify(),
-		ws.WithMaxMessageSize(100000),
-		ws.WithPingIntervalSec(4),
+		ws.WithPingIntervalSec(8),
 		ws.WithPingMsg([]byte("ping")),
 	)
 
-	if err := s.conn.Dial(u.String(), ""); err != nil {
+	if err := s.conn.Dial(ctx, u.String(), ""); err != nil {
 		s.logger.Error("failed to connect to", zap.String("url", u.String()), zap.Error(err))
 		return err
 	}
@@ -164,5 +168,10 @@ func (s *service) Connect(ctx context.Context) error {
 		s.logger.Error("failed to get properties", zap.Error(err))
 		return err
 	}
-	return s.reconnect()
+	return s.reconnect(ctx)
+}
+
+func (s *service) SubscribeToTimeout() chan error {
+	s.timeoutErrChan = make(chan error, 1)
+	return s.timeoutErrChan
 }

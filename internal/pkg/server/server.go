@@ -17,6 +17,7 @@ var _ api.ServerInterface = (*server)(nil)
 
 type winetService interface {
 	SendSelfConsumptionCommand() (bool, error)
+	SendBatteryStopCommand() (bool, error)
 	SetFeedInLimitation(feedinLimited bool) (bool, error)
 	// like 6.6
 	SendDischargeCommand(dischargePower string) (bool, error)
@@ -28,43 +29,14 @@ type winetService interface {
 type database interface {
 	GetLatestProperties(ctx context.Context) (model.Properties, error)
 	GetProperties(ctx context.Context, identifier, slug string, from, to *time.Time) (model.Properties, error)
+	GetAmberPrices(ctx context.Context, from, to time.Time, site *string) (model.AmberPrices, error)
 }
 
 type server struct {
 	winets winetService
 	db     database
 	logger *zap.Logger
-}
-
-// GetProperties implements api.ServerInterface.
-func (s *server) GetProperties(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	props, err := s.db.GetLatestProperties(ctx)
-	if err != nil {
-		handleError(w, err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(props); err != nil {
-		handleError(w, err)
-		return
-	}
-}
-
-// GetPropertyIdentifierSlug implements api.ServerInterface.
-func (s *server) GetPropertyIdentifierSlug(w http.ResponseWriter, r *http.Request, identifier string, slug string, params api.GetPropertyIdentifierSlugParams) {
-	ctx := r.Context()
-	props, err := s.db.GetProperties(ctx, identifier, slug, params.From, params.To)
-	if err != nil {
-		handleError(w, err)
-		return
-	}
-	if err := json.NewEncoder(w).Encode(props); err != nil {
-		handleError(w, err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
+	loc    *time.Location
 }
 
 func New(ws winetService, db database) *server {
@@ -72,6 +44,37 @@ func New(ws winetService, db database) *server {
 		winets: ws,
 		logger: zap.L(),
 		db:     db,
+		loc:    time.Now().Location(),
+	}
+}
+
+func (s *server) GetAmberPricesFromTo(w http.ResponseWriter, r *http.Request, from time.Time, to time.Time, params api.GetAmberPricesFromToParams) {
+	ctx := r.Context()
+	amberPrices, err := s.db.GetAmberPrices(ctx, from.In(s.loc), to.In(s.loc), params.Site)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	res := []api.AmberPrice{}
+	for _, price := range amberPrices {
+		res = append(res, api.AmberPrice{
+			PerKwh:      price.PerKwh,
+			SpotPerKwh:  price.SpotPerKwh,
+			StartTime:   price.StartTime,
+			EndTime:     price.EndTime,
+			Duration:    price.Duration,
+			Forecast:    price.Forecast,
+			ChannelType: price.ChannelType,
+			CreatedAt:   price.CreatedAt,
+			UpdatedAt:   price.UpdatedAt,
+			Id:          price.ID,
+		})
+	}
+
+	if err := json.NewEncoder(w).Encode(res); err != nil {
+		handleError(w, err)
+		return
 	}
 }
 
@@ -137,6 +140,15 @@ func (s *server) changeBatteryState(req *api.ChangeBatteryStatePayload) error {
 		if !success {
 			return errors.New("failed to send discharge command")
 		}
+	case api.Stop:
+		s.logger.Info("switching battery to", zap.String("state", string(req.State)))
+		success, err := s.winets.SendBatteryStopCommand()
+		if err != nil {
+			return err
+		}
+		if !success {
+			return errors.New("failed to send battery stop command")
+		}
 	case api.Charge:
 		if req.Power == nil {
 			return errors.New("power param cannot be empty")
@@ -181,4 +193,35 @@ func unmarshalPayload[T any](r *http.Request) (*T, error) {
 		return nil, err
 	}
 	return &out, nil
+}
+
+// GetProperties implements api.ServerInterface.
+func (s *server) GetProperties(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	props, err := s.db.GetLatestProperties(ctx)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(props); err != nil {
+		handleError(w, err)
+		return
+	}
+}
+
+// GetPropertyIdentifierSlug implements api.ServerInterface.
+func (s *server) GetPropertyIdentifierSlug(w http.ResponseWriter, r *http.Request, identifier string, slug string, params api.GetPropertyIdentifierSlugParams) {
+	ctx := r.Context()
+	props, err := s.db.GetProperties(ctx, identifier, slug, params.From, params.To)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	if err := json.NewEncoder(w).Encode(props); err != nil {
+		handleError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
 }

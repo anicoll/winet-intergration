@@ -2,17 +2,19 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/anicoll/winet-integration/internal/pkg/amber"
 	"github.com/anicoll/winet-integration/internal/pkg/config"
 	"github.com/anicoll/winet-integration/internal/pkg/database"
 	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 	"github.com/anicoll/winet-integration/internal/pkg/server"
 	"github.com/anicoll/winet-integration/internal/pkg/winet"
 	api "github.com/anicoll/winet-integration/pkg/server"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/robfig/cron/v3"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
@@ -59,12 +61,13 @@ func run(ctx context.Context, cfg *config.Config) error {
 	}()
 	zap.ReplaceGlobals(logger)
 
-	conn, err := pgx.Connect(ctx, os.Getenv("DATABASE_URL"))
+	pool, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
 	if err != nil {
 		return err
 	}
-	defer conn.Close(ctx)
-	db := database.NewDatabase(ctx, conn)
+
+	defer pool.Close()
+	db := database.NewDatabase(ctx, pool)
 
 	if err := publisher.RegisterPublisher("postgres", db); err != nil {
 		return err
@@ -73,21 +76,39 @@ func run(ctx context.Context, cfg *config.Config) error {
 	winetSvc := winet.New(cfg.WinetCfg, errorChan)
 
 	eg.Go(func() error {
-		return cronDbCleanup(db)
+		return cronDbCleanup(db, errorChan)
 	})
 
 	eg.Go(func() error {
-		return winetSvc.Connect(ctx)
+		return processAmberPrices(ctx, db, errorChan)
+	})
+
+	eg.Go(func() error {
+		var err error
+		for {
+			winetSvc = winet.New(cfg.WinetCfg, errorChan)
+			if err = winetSvc.Connect(ctx); err != nil {
+				logger.Error("winetSvc.Connect error", zap.Error(err))
+				return err
+			}
+			if err = <-winetSvc.SubscribeToTimeout(); errors.Is(err, winet.ErrTimeout) {
+				logger.Error("timeout error", zap.Error(err))
+				continue
+			}
+		}
 	})
 
 	eg.Go(func() error {
 		srv := &http.Server{
 			Handler: api.HandlerWithOptions(server.New(winetSvc, db), api.GorillaServerOptions{
-				Middlewares: []api.MiddlewareFunc{server.LoggingMiddleware},
+				Middlewares: []api.MiddlewareFunc{server.TimeoutMiddleware, server.LoggingMiddleware},
+				ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+					panic(err)
+				},
 			}),
-			Addr:         "127.0.0.1:8000",
-			WriteTimeout: 15 * time.Second,
-			ReadTimeout:  15 * time.Second,
+			Addr:         "0.0.0.0:8000",
+			WriteTimeout: 5 * time.Second,
+			ReadTimeout:  5 * time.Second,
 		}
 
 		return srv.ListenAndServe()
@@ -95,20 +116,28 @@ func run(ctx context.Context, cfg *config.Config) error {
 
 	eg.Go(func() error {
 		// handle any async errors from service
-		select {
-		case err := <-errorChan:
-			logger.Error(err.Error())
-		case <-ctx.Done():
-			logger.Info("context done")
-			return nil
+		for {
+			select {
+			case err := <-errorChan:
+				if errors.Is(err, errCron) {
+					logger.Error("cron error", zap.Error(err))
+				}
+				return err
+			case <-ctx.Done():
+				err = ctx.Err()
+				logger.Error("context done", zap.Error(err))
+				os.Exit(2)
+				return err
+			}
 		}
-		return nil
 	})
 
 	return eg.Wait()
 }
 
-func cronDbCleanup(db *database.Database) error {
+var errCron = errors.New("cron error")
+
+func cronDbCleanup(db *database.Database, errChan chan error) error {
 	if err := db.Cleanup(context.Background()); err != nil {
 		return err
 	}
@@ -118,13 +147,51 @@ func cronDbCleanup(db *database.Database) error {
 	if _, err := c.AddFunc("CRON_TZ=Australia/Adelaide 0 3 * * *", func() {
 		if err := db.Cleanup(context.Background()); err != nil {
 			zap.L().Error("error cleaning up database", zap.Error(err))
+			errChan <- errCron
 			return
 		}
-		zap.L().Info("automated discharge of battery")
+		zap.L().Info("cleanup of database completed")
 	}); err != nil {
 		return err
 	}
 
 	c.Run()
 	return nil
+}
+
+func processAmberPrices(ctx context.Context, db *database.Database, errChan chan error) error {
+	svc, err := amber.New(ctx, os.Getenv("AMBER_HOST"), os.Getenv("AMBER_TOKEN"))
+	if err != nil {
+		return err
+	}
+	site := svc.GetSites()[0]
+
+	prices, err := svc.GetPrices(ctx, site.Id)
+	if err != nil {
+		return err
+	}
+
+	if err := db.WriteAmberPrices(ctx, prices); err != nil {
+		return err
+	}
+
+	c := cron.New()
+	if _, err := c.AddFunc("CRON_TZ=Australia/Adelaide */5 * * * *", func() {
+		time.Sleep(5 * time.Second) // just to ensure we get the latest prices.
+		prices, err = svc.GetPrices(ctx, site.Id)
+		if err != nil {
+			errChan <- errCron
+			return
+		}
+		if err = db.WriteAmberPrices(ctx, prices); err != nil {
+			errChan <- errCron
+			return
+		}
+		zap.L().Info("amber prices updated")
+	}); err != nil {
+		return err
+	}
+
+	c.Run()
+	return err
 }
