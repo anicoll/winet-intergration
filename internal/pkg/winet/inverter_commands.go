@@ -48,10 +48,12 @@ func (s *service) SendSelfConsumptionCommand() (bool, error) {
 	s.sendIfErr(s.conn.Send(ws.Msg{
 		Body: data,
 	}))
-	res := s.waiter()
-	result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
-	s.logger.Info("SendSelfConsumptionCommand", zap.Any("any", res))
-	return result.ResultMessage == "success", nil
+	// res := s.waiter() // REMOVED: s.processed channel and waiter() are being removed.
+	// result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
+	// s.logger.Info("SendSelfConsumptionCommand", zap.Any("any", res))
+	// return result.ResultMessage == "success", nil
+	s.logger.Warn("SendSelfConsumptionCommand: s.processed reply mechanism removed, command result unknown.")
+	return false, errors.New("s.processed reply mechanism removed, command result unknown")
 }
 
 func (s *service) SendDischargeCommand(dischargePower string) (bool, error) {
@@ -102,10 +104,12 @@ func (s *service) SendDischargeCommand(dischargePower string) (bool, error) {
 	s.sendIfErr(s.conn.Send(ws.Msg{
 		Body: data,
 	}))
-	res := s.waiter()
-	result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
-	s.logger.Info("SendSelfConsumptionCommand", zap.Any("any", res))
-	return result.ResultMessage == "success", nil
+	// res := s.waiter() // REMOVED: s.processed channel and waiter() are being removed.
+	// result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
+	// s.logger.Info("SendSelfConsumptionCommand", zap.Any("any", res))
+	// return result.ResultMessage == "success", nil
+	s.logger.Warn("SendDischargeCommand: s.processed reply mechanism removed, command result unknown.")
+	return false, errors.New("s.processed reply mechanism removed, command result unknown")
 }
 
 func (s *service) SendChargeCommand(chargePower string) (bool, error) {
@@ -156,10 +160,12 @@ func (s *service) SendChargeCommand(chargePower string) (bool, error) {
 	s.sendIfErr(s.conn.Send(ws.Msg{
 		Body: data,
 	}))
-	res := s.waiter()
-	result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
-	s.logger.Info("SendSelfConsumptionCommand", zap.Any("any", res))
-	return result.ResultMessage == "success", nil
+	// res := s.waiter() // REMOVED: s.processed channel and waiter() are being removed.
+	// result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
+	// s.logger.Info("SendSelfConsumptionCommand", zap.Any("any", res))
+	// return result.ResultMessage == "success", nil
+	s.logger.Warn("SendChargeCommand: s.processed reply mechanism removed, command result unknown.")
+	return false, errors.New("s.processed reply mechanism removed, command result unknown")
 }
 
 func (s *service) SendBatteryStopCommand() (bool, error) {
@@ -202,10 +208,12 @@ func (s *service) SendBatteryStopCommand() (bool, error) {
 	s.sendIfErr(s.conn.Send(ws.Msg{
 		Body: data,
 	}))
-	res := s.waiter()
-	result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
-	s.logger.Info("SendBatteryStopCommand", zap.Any("any", res))
-	return result.ResultMessage == "success", nil
+	// res := s.waiter() // REMOVED: s.processed channel and waiter() are being removed.
+	// result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
+	// s.logger.Info("SendBatteryStopCommand", zap.Any("any", res))
+	// return result.ResultMessage == "success", nil
+	s.logger.Warn("SendBatteryStopCommand: s.processed reply mechanism removed, command result unknown.")
+	return false, errors.New("s.processed reply mechanism removed, command result unknown")
 }
 
 func (s *service) SendInverterStateChangeCommand(disable bool) (bool, error) {
@@ -238,9 +246,11 @@ func (s *service) SendInverterStateChangeCommand(disable bool) (bool, error) {
 		Body: data,
 	}))
 
-	result := s.waiter().(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
-	s.logger.Info("SendInverterStateChangeCommand", zap.Any("any", result))
-	return result.ResultMessage == "success", nil
+	// result := s.waiter().(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]]) // REMOVED
+	// s.logger.Info("SendInverterStateChangeCommand", zap.Any("any", result))
+	// return result.ResultMessage == "success", nil
+	s.logger.Warn("SendInverterStateChangeCommand: s.processed reply mechanism removed, command result unknown.")
+	return false, errors.New("s.processed reply mechanism removed, command result unknown")
 }
 
 func (s *service) SetFeedInLimitation(feedinLimited bool) (bool, error) {
@@ -294,10 +304,12 @@ func (s *service) SetFeedInLimitation(feedinLimited bool) (bool, error) {
 	s.sendIfErr(s.conn.Send(ws.Msg{
 		Body: data,
 	}))
-	res := s.waiter()
-	result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
-	s.logger.Info("SendSelfConsumptionCommand", zap.Any("any", res))
-	return result.ResultMessage == "success", nil
+	// res := s.waiter() // REMOVED: s.processed channel and waiter() are being removed.
+	// result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
+	// s.logger.Info("SendSelfConsumptionCommand", zap.Any("any", res))
+	// return result.ResultMessage == "success", nil
+	s.logger.Warn("SetFeedInLimitation: s.processed reply mechanism removed, command result unknown.")
+	return false, errors.New("s.processed reply mechanism removed, command result unknown")
 }
 
 func (s *service) handleParamMessage(data []byte, _ ws.Connection) {
@@ -306,5 +318,5 @@ func (s *service) handleParamMessage(data []byte, _ ws.Connection) {
 	s.sendIfErr(err)
 	s.logger.Info("param_message", zap.Any("payload", res))
 
-	s.processed <- res
+	// s.processed <- res // REMOVED: s.processed channel is being removed
 }
