@@ -40,7 +40,7 @@ func (s *service) handleRealMessage(data []byte) {
 	datapointsToPublish[*s.currentDevice] = datapoints
 	err = publisher.PublishData(contxt.NewContext(time.Second*5), datapointsToPublish)
 	s.sendIfErr(err)
-	s.processed <- struct{}{} // indicate we are done.
+	// s.processed <- struct{}{} // REMOVED: s.processed channel is being removed
 }
 
 func (s *service) calculateValue(device model.GenericUnit) *string {

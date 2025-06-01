@@ -80,5 +80,5 @@ func (s *service) handleDirectMessage(data []byte) {
 	}
 
 	datapointsToPublish[*s.currentDevice] = datapoints
-	s.processed <- struct{}{} // indicate we are done.
+	// s.processed <- struct{}{} // REMOVED: s.processed channel is being removed
 }

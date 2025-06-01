@@ -47,7 +47,8 @@ func (s *service) handleDeviceListMessage(data []byte, c ws.Connection) {
 			s.sendIfErr(c.Send(ws.Msg{
 				Body: requestData,
 			}))
-			s.waiter()
+			// s.waiter() // REMOVED: s.processed channel and waiter() are being removed.
+						// This loop will now send requests without waiting for the flawed sync point.
 		}
 	}
 	ticker := time.NewTicker(time.Second * s.cfg.PollInterval)
@@ -55,6 +56,14 @@ func (s *service) handleDeviceListMessage(data []byte, c ws.Connection) {
 	s.sendDeviceListRequest(c)
 }
 
-func (s *service) waiter() any {
-	return <-s.processed
+// func (s *service) waiter() any { // REMOVED: s.processed channel is being removed.
+// 	return <-s.processed
+// }
+
+// GetDeviceList was the original sole receiver of s.processed.
+// It's now modified to reflect that s.processed is removed.
+// A proper implementation for GetDeviceList to get data is needed.
+func (s *service) GetDeviceList(ctx context.Context) any {
+	s.logger.Warn("GetDeviceList called, but s.processed channel is removed. Returning nil. Functionality needs redesign.")
+	return nil // Placeholder, as the original mechanism is gone.
 }
