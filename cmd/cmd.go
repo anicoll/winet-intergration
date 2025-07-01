@@ -19,6 +19,7 @@ import (
 	"github.com/anicoll/winet-integration/internal/pkg/server"
 	"github.com/anicoll/winet-integration/internal/pkg/winet"
 	api "github.com/anicoll/winet-integration/pkg/server"
+	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/robfig/cron/v3"
 	"github.com/urfave/cli/v2"
@@ -334,14 +335,19 @@ func startWinetService(ctx context.Context, winetSvc winetSvc, errChan chan erro
 func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db *database.Database, logger *zap.Logger) error {
 	logger.Info("Starting HTTP server", zap.String("addr", serverAddr))
 
+	r := mux.NewRouter()
+	r.Use(mux.CORSMethodMiddleware(r))
+	apiHandler := api.HandlerWithOptions(server.New(winetSvc, db), api.GorillaServerOptions{
+		BaseRouter:  r,
+		Middlewares: []api.MiddlewareFunc{server.TimeoutMiddleware, server.LoggingMiddleware},
+		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			logger.Error("HTTP handler error", zap.Error(err))
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		},
+	})
+
 	srv := &http.Server{
-		Handler: api.HandlerWithOptions(server.New(winetSvc, db), api.GorillaServerOptions{
-			Middlewares: []api.MiddlewareFunc{server.TimeoutMiddleware, server.LoggingMiddleware},
-			ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
-				logger.Error("HTTP handler error", zap.Error(err))
-				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			},
-		}),
+		Handler:      apiHandler,
 		Addr:         serverAddr,
 		WriteTimeout: serverWriteTimeout,
 		ReadTimeout:  serverReadTimeout,
