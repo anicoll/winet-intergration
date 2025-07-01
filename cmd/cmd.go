@@ -27,6 +27,8 @@ import (
 	api "github.com/anicoll/winet-integration/pkg/server"
 )
 
+var errCron = errors.New("cron error")
+
 const (
 	// Server configuration
 	serverAddr         = "0.0.0.0:8000"
@@ -126,6 +128,8 @@ func run(ctx context.Context, cfg *config.Config) error {
 	eg.Go(func() error {
 		return startAmberPriceService(ctx, db, errorChan, logger)
 	})
+
+	winetSvc := winet.New(cfg.WinetCfg, errorChan)
 
 	// Start winet service with retry logic
 	eg.Go(func() error {
@@ -388,5 +392,3 @@ func handleErrors(ctx context.Context, errorChan chan error, logger *zap.Logger)
 		}
 	}
 }
-
-var errCron = errors.New("cron error")
