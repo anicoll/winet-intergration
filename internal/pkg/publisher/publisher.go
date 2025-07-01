@@ -72,7 +72,7 @@ func PublishData(ctx context.Context, deviceStatusMap map[model.Device][]model.D
 
 			slugIdentifier := fmt.Sprintf("%s_%s", strings.Replace(device.Model, ".", "", -1), device.SerialNumber)
 
-			if !shouldUpdate(slugIdentifier, status.Slug, val) {
+			if ignoreSlug(status.Slug) || !shouldUpdate(slugIdentifier, status.Slug, val) {
 				continue
 			}
 			count++
@@ -94,6 +94,37 @@ func PublishData(ctx context.Context, deviceStatusMap map[model.Device][]model.D
 		zap.L().Debug("updated sensors", zap.Int("count", count), zap.String("publisher", name))
 	}
 	return nil
+}
+
+func ignoreSlug(slug string) bool {
+	ignoredSlugs := map[string]struct{}{
+		"grid_frequency":                   {},
+		"phase_a_voltage":                  {},
+		"phase_a_current":                  {},
+		"phase_a_backup_current":           {},
+		"phase_b_backup_current":           {},
+		"phase_c_backup_current":           {},
+		"phase_a_backup_voltage":           {},
+		"phase_b_backup_voltage":           {},
+		"phase_c_backup_voltage":           {},
+		"backup_frequency":                 {},
+		"phase_a_backup_power":             {},
+		"phase_b_backup_power":             {},
+		"phase_c_backup_power":             {},
+		"total_backup_power":               {},
+		"meter_grid_freq":                  {},
+		"reactive_power_uploaded_by_meter": {},
+		"meter_phase_a_voltage":            {},
+		"meter_phase_b_voltage":            {},
+		"meter_phase_c_voltage":            {},
+		"meter_phase_a_current":            {},
+		"meter_phase_b_current":            {},
+		"meter_phase_c_current":            {},
+		"bus_voltate":                      {},
+		"array_insulation_resistance":      {},
+	}
+	_, exists := ignoredSlugs[slug]
+	return exists
 }
 
 func RegisterDevice(device *model.Device) error {
