@@ -147,7 +147,7 @@ func shouldUpdate(identifier, slug, newValue string) bool {
 	if !exists {
 		zap.L().Info("Configured sensor:", zap.String("device", identifier), zap.String("sensor", slug), zap.String("value", newValue))
 	} else {
-		zap.L().Info("Configured sensor:", zap.String("device", identifier), zap.String("sensor", slug), zap.String("value", newValue))
+		zap.L().Debug("Configured sensor:", zap.String("device", identifier), zap.String("sensor", slug), zap.String("value", newValue))
 	}
 	sensors.Store(key, newValue)
 	return true
