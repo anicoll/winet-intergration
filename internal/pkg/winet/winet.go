@@ -171,7 +171,7 @@ func (s *service) Connect(ctx context.Context) error {
 	return s.reconnect(ctx)
 }
 
-func (s *service) SubscribeToTimeout() chan error {
+func (s *service) SubscribeToTimeout() <-chan error {
 	s.timeoutErrChan = make(chan error, 1)
 	return s.timeoutErrChan
 }

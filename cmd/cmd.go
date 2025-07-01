@@ -26,6 +26,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+var errCron = errors.New("cron error")
+
 const (
 	// Server configuration
 	serverAddr         = "0.0.0.0:8000"
@@ -125,14 +127,16 @@ func run(ctx context.Context, cfg *config.Config) error {
 		return startAmberPriceService(ctx, db, errorChan, logger)
 	})
 
+	winetSvc := winet.New(cfg.WinetCfg, errorChan)
+
 	// Start winet service with retry logic
 	eg.Go(func() error {
-		return startWinetService(ctx, cfg.WinetCfg, errorChan, logger)
+		return startWinetService(ctx, winetSvc, errorChan, logger)
 	})
 
 	// Start HTTP server
 	eg.Go(func() error {
-		return startHTTPServer(ctx, cfg, db, logger)
+		return startHTTPServer(ctx, winetSvc, db, logger)
 	})
 
 	// Start error handler
@@ -286,7 +290,12 @@ func fetchAndStorePrices(ctx context.Context, svc interface {
 	return nil
 }
 
-func startWinetService(ctx context.Context, cfg *config.WinetConfig, errChan chan error, logger *zap.Logger) error {
+type winetSvc interface {
+	Connect(ctx context.Context) error
+	SubscribeToTimeout() <-chan error
+}
+
+func startWinetService(ctx context.Context, winetSvc winetSvc, errChan chan error, logger *zap.Logger) error {
 	logger.Info("Starting winet service")
 
 	for {
@@ -297,7 +306,6 @@ func startWinetService(ctx context.Context, cfg *config.WinetConfig, errChan cha
 		default:
 		}
 
-		winetSvc := winet.New(cfg, errChan)
 		if err := winetSvc.Connect(ctx); err != nil {
 			logger.Error("winet connection failed", zap.Error(err))
 			// Add exponential backoff here if needed
@@ -323,11 +331,8 @@ func startWinetService(ctx context.Context, cfg *config.WinetConfig, errChan cha
 	}
 }
 
-func startHTTPServer(ctx context.Context, cfg *config.Config, db *database.Database, logger *zap.Logger) error {
+func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db *database.Database, logger *zap.Logger) error {
 	logger.Info("Starting HTTP server", zap.String("addr", serverAddr))
-
-	// Create a temporary winet service for the server - this might need adjustment based on your architecture
-	winetSvc := winet.New(cfg.WinetCfg, make(chan error, 1))
 
 	srv := &http.Server{
 		Handler: api.HandlerWithOptions(server.New(winetSvc, db), api.GorillaServerOptions{
@@ -385,5 +390,3 @@ func handleErrors(ctx context.Context, errorChan chan error, logger *zap.Logger)
 		}
 	}
 }
-
-var errCron = errors.New("cron error")
