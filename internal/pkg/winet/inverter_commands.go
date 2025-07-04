@@ -45,6 +45,9 @@ func (s *service) SendSelfConsumptionCommand() (bool, error) {
 		},
 	})
 	s.sendIfErr(err)
+	if s.conn == nil {
+		return false, fmt.Errorf("connection is nil, cannot send command")
+	}
 	s.sendIfErr(s.conn.Send(ws.Msg{
 		Body: data,
 	}))

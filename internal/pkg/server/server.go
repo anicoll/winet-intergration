@@ -8,14 +8,14 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/anicoll/winet-integration/internal/pkg/model"
+	"github.com/anicoll/winet-integration/internal/pkg/models"
 	api "github.com/anicoll/winet-integration/pkg/server"
 	"go.uber.org/zap"
 )
 
 var _ api.ServerInterface = (*server)(nil)
 
-type winetService interface {
+type WinetService interface {
 	SendSelfConsumptionCommand() (bool, error)
 	SendBatteryStopCommand() (bool, error)
 	SetFeedInLimitation(feedinLimited bool) (bool, error)
@@ -27,19 +27,25 @@ type winetService interface {
 }
 
 type database interface {
-	GetLatestProperties(ctx context.Context) (model.Properties, error)
-	GetProperties(ctx context.Context, identifier, slug string, from, to *time.Time) (model.Properties, error)
-	GetAmberPrices(ctx context.Context, from, to time.Time, site *string) (model.AmberPrices, error)
+	GetLatestProperties(ctx context.Context) ([]models.Property, error)
+	GetProperties(ctx context.Context, identifier, slug string, from, to *time.Time) ([]models.Property, error)
+	GetAmberPrices(ctx context.Context, from, to time.Time, site *string) ([]models.Amberprice, error)
 }
 
 type server struct {
-	winets winetService
+	winets WinetService
 	db     database
 	logger *zap.Logger
 	loc    *time.Location
 }
 
-func New(ws winetService, db database) *server {
+// OptionsBatteryState implements api.ServerInterface.
+func (s *server) OptionsBatteryState(w http.ResponseWriter, r *http.Request, state string) {
+	w.Header().Set("Allow", "POST,OPTIONS")
+	w.WriteHeader(http.StatusOK)
+}
+
+func New(ws WinetService, db database) *server {
 	return &server{
 		winets: ws,
 		logger: zap.L(),
@@ -59,15 +65,15 @@ func (s *server) GetAmberPricesFromTo(w http.ResponseWriter, r *http.Request, fr
 	res := []api.AmberPrice{}
 	for _, price := range amberPrices {
 		res = append(res, api.AmberPrice{
-			PerKwh:      price.PerKwh,
-			SpotPerKwh:  price.SpotPerKwh,
+			PerKwh:      float32(price.PerKwh),
+			SpotPerKwh:  float32(price.SpotPerKwh),
 			StartTime:   price.StartTime,
 			EndTime:     price.EndTime,
 			Duration:    price.Duration,
 			Forecast:    price.Forecast,
 			ChannelType: price.ChannelType,
-			CreatedAt:   price.CreatedAt,
-			UpdatedAt:   price.UpdatedAt,
+			CreatedAt:   price.CreatedAt.Time,
+			UpdatedAt:   price.UpdatedAt.Time,
 			Id:          price.ID,
 		})
 	}
@@ -89,7 +95,6 @@ func (s *server) PostBatteryState(w http.ResponseWriter, r *http.Request, state 
 		handleError(w, err)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("success"))
 }
 
@@ -110,7 +115,6 @@ func (s *server) PostInverterFeedin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.logger.Info("limit feed in switched", zap.Bool("disable_feedin", feedinReq.Disable))
-	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("success"))
 }
 
@@ -125,7 +129,6 @@ func (s *server) PostInverterState(w http.ResponseWriter, r *http.Request, state
 		handleError(w, err)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("success"))
 }
 
@@ -204,7 +207,6 @@ func (s *server) GetProperties(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(props); err != nil {
 		handleError(w, err)
 		return

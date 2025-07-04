@@ -3,9 +3,11 @@ package config
 import "time"
 
 type Config struct {
-	WinetCfg *WinetConfig
-	MqttCfg  *WinetConfig
-	LogLevel string
+	WinetCfg         *WinetConfig
+	MqttCfg          *WinetConfig
+	LogLevel         string
+	DBDSN            string
+	MigrationsFolder string
 }
 
 type WinetConfig struct {
