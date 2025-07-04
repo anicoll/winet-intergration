@@ -14,3 +14,7 @@ tidy:
 .PHONY: build
 build:
 	go build .
+
+gen-models:
+	mkdir -p ./internal/pkg/models
+	/root/go/bin/dbtpl schema ${DATABASE_URL} --out ./internal/pkg/models

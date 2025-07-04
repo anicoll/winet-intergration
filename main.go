@@ -42,6 +42,18 @@ func main() {
 				EnvVars: []string{"WINET_USERNAME"},
 				Value:   "",
 			},
+			&cli.StringFlag{
+				Name:     "database-url",
+				EnvVars:  []string{"DATABASE_URL"},
+				Value:    "",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "migrations-folder",
+				EnvVars:  []string{"MIGRATIONS_FOLDER"},
+				Value:    "",
+				Required: true,
+			},
 			&cli.BoolFlag{
 				Name:    "winet-ssl",
 				EnvVars: []string{"WINET_SSL"},

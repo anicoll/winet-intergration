@@ -23,7 +23,7 @@ var (
 type publisher interface {
 	// PublishData publishes the device status data to the registered adapters
 	Write(ctx context.Context, data []map[string]any) error
-	RegisterDevice(device *model.Device) error
+	RegisterDevice(ctx context.Context, device *model.Device) error
 }
 
 func RegisterPublisher(name string, publisher publisher) error {
@@ -129,7 +129,7 @@ func ignoreSlug(slug string) bool {
 
 func RegisterDevice(device *model.Device) error {
 	for name, publisher := range registerdPublishers {
-		if err := publisher.RegisterDevice(device); err != nil {
+		if err := publisher.RegisterDevice(context.Background(), device); err != nil {
 			zap.L().Error("failed to register device", zap.Error(err), zap.String("publisher", name))
 			continue
 		}
