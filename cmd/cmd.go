@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
 	"github.com/gorilla/mux"
 	_ "github.com/jackc/pgx/v5/stdlib" // pgx as database/sql driver
 	"github.com/robfig/cron/v3"
@@ -174,7 +175,8 @@ func setupLogger(logLevel string) (*zap.Logger, error) {
 }
 
 func setupDatabase(ctx context.Context, dsn, migrationsPath string) (*database.Database, func(), error) {
-	if err := migration.Migrate(dsn, migrationsPath); err != nil {
+	err := migration.Migrate(dsn, migrationsPath)
+	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return nil, nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 

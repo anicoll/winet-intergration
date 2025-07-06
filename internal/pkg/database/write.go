@@ -2,8 +2,6 @@ package database
 
 import (
 	"context"
-	"database/sql"
-	"time"
 
 	"github.com/anicoll/winet-integration/internal/pkg/model"
 	"github.com/anicoll/winet-integration/internal/pkg/models"
@@ -52,11 +50,17 @@ func (d *Database) WriteAmberPrices(ctx context.Context, prices []models.Amberpr
 	defer tx.Rollback()
 
 	for _, price := range prices {
-		price.UpdatedAt = sql.NullTime{
-			Time:  time.Now(),
-			Valid: true,
-		}
-		if err := price.Upsert(ctx, tx); err != nil {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO AmberPrice (per_kwh, spot_per_kwh, start_time, end_time, duration, forecast, channel_type)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			ON CONFLICT (start_time, channel_type) DO UPDATE
+			SET per_kwh = EXCLUDED.per_kwh,
+				spot_per_kwh = EXCLUDED.spot_per_kwh,
+				duration = EXCLUDED.duration,
+				forecast = EXCLUDED.forecast,
+				channel_type = EXCLUDED.channel_type,
+				updated_at = NOW()
+		`, price.PerKwh, price.SpotPerKwh, price.StartTime, price.EndTime, price.Duration, price.Forecast, price.ChannelType); err != nil {
 			return err
 		}
 	}
