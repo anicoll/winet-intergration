@@ -9,6 +9,9 @@ import (
 )
 
 func (s *service) getProperties(ctx context.Context) error {
+	if s.properties != nil {
+		return nil // already loaded
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+s.cfg.Host+"/i18n/en_US.properties", nil)
 	if err != nil {
 		return err
