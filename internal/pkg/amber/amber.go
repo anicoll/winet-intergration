@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anicoll/winet-integration/internal/pkg/model"
+	"github.com/anicoll/winet-integration/internal/pkg/models"
 	ac "github.com/anicoll/winet-integration/pkg/amber"
 	"github.com/anicoll/winet-integration/pkg/utils"
 	"go.uber.org/zap"
@@ -73,7 +73,7 @@ func (c *client) GetSites() []ac.Site {
 	return c.sites
 }
 
-func (c *client) GetPrices(ctx context.Context, siteID string) (model.AmberPrices, error) {
+func (c *client) GetPrices(ctx context.Context, siteID string) ([]models.Amberprice, error) {
 	response, err := c.aClient.GetCurrentPricesWithResponse(ctx, siteID, &ac.GetCurrentPricesParams{
 		Next:     utils.ToPtr(1600),
 		Previous: utils.ToPtr(400),
@@ -133,11 +133,11 @@ func (c *client) GetPrices(ctx context.Context, siteID string) (model.AmberPrice
 		return a.StartTime.Compare(b.StartTime)
 	})
 
-	res := model.AmberPrices{}
+	res := []models.Amberprice{}
 	for _, interval := range historicalIntervals {
-		res = append(res, model.AmberPrice{
-			PerKwh:      interval.PerKwh,
-			SpotPerKwh:  interval.SpotPerKwh,
+		res = append(res, models.Amberprice{
+			PerKwh:      float64(interval.PerKwh),
+			SpotPerKwh:  float64(interval.SpotPerKwh),
 			StartTime:   interval.StartTime,
 			EndTime:     interval.EndTime,
 			Duration:    int(interval.Duration),
@@ -146,9 +146,9 @@ func (c *client) GetPrices(ctx context.Context, siteID string) (model.AmberPrice
 		})
 	}
 	for _, interval := range forecastIntervals {
-		res = append(res, model.AmberPrice{
-			PerKwh:      interval.PerKwh,
-			SpotPerKwh:  interval.SpotPerKwh,
+		res = append(res, models.Amberprice{
+			PerKwh:      float64(interval.PerKwh),
+			SpotPerKwh:  float64(interval.SpotPerKwh),
 			StartTime:   interval.StartTime,
 			EndTime:     interval.EndTime,
 			Duration:    int(interval.Duration),
@@ -157,9 +157,9 @@ func (c *client) GetPrices(ctx context.Context, siteID string) (model.AmberPrice
 		})
 	}
 	for _, interval := range currentIntervals {
-		res = append(res, model.AmberPrice{
-			PerKwh:      interval.PerKwh,
-			SpotPerKwh:  interval.SpotPerKwh,
+		res = append(res, models.Amberprice{
+			PerKwh:      float64(interval.PerKwh),
+			SpotPerKwh:  float64(interval.SpotPerKwh),
 			StartTime:   interval.StartTime,
 			EndTime:     interval.EndTime,
 			Duration:    int(interval.Duration),

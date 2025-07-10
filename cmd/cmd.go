@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,7 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/gorilla/mux"
+	_ "github.com/jackc/pgx/v5/stdlib" // pgx as database/sql driver
 	"github.com/robfig/cron/v3"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
@@ -20,12 +23,15 @@ import (
 	"github.com/anicoll/winet-integration/internal/pkg/amber"
 	"github.com/anicoll/winet-integration/internal/pkg/config"
 	"github.com/anicoll/winet-integration/internal/pkg/database"
-	"github.com/anicoll/winet-integration/internal/pkg/model"
+	"github.com/anicoll/winet-integration/internal/pkg/database/migration"
+	"github.com/anicoll/winet-integration/internal/pkg/models"
 	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 	"github.com/anicoll/winet-integration/internal/pkg/server"
 	"github.com/anicoll/winet-integration/internal/pkg/winet"
 	api "github.com/anicoll/winet-integration/pkg/server"
 )
+
+var errCron = errors.New("cron error")
 
 const (
 	// Server configuration
@@ -55,6 +61,8 @@ func WinetCommand(ctx *cli.Context) error {
 			Ssl:          ctx.Bool("winet-ssl"),
 			PollInterval: ctx.Duration("poll-interval"),
 		},
+		DBDSN:            ctx.String("database-url"),
+		MigrationsFolder: ctx.String("migrations-folder"),
 		MqttCfg: &config.WinetConfig{
 			Host:     ctx.String("mqtt-host"),
 			Username: ctx.String("mqtt-user"),
@@ -99,10 +107,11 @@ func run(ctx context.Context, cfg *config.Config) error {
 	}()
 
 	// Initialize database connection
-	db, cleanup, err := setupDatabase(ctx)
+	db, cleanup, err := setupDatabase(ctx, cfg.DBDSN, cfg.MigrationsFolder)
 	if err != nil {
 		return fmt.Errorf("failed to setup database: %w", err)
 	}
+	_ = db
 	defer cleanup()
 
 	// Register publishers
@@ -110,11 +119,11 @@ func run(ctx context.Context, cfg *config.Config) error {
 		return fmt.Errorf("failed to register postgres publisher: %w", err)
 	}
 
-	// Setup error channel with buffer
+	// // Setup error channel with buffer
 	errorChan := make(chan error, errorChannelBuffer)
 	winetSvc := winet.New(cfg.WinetCfg, errorChan)
 
-	// Start all services
+	// // Start all services
 	eg, ctx := errgroup.WithContext(ctx)
 
 	// Start database cleanup service
@@ -165,26 +174,23 @@ func setupLogger(logLevel string) (*zap.Logger, error) {
 	return logger, nil
 }
 
-func setupDatabase(ctx context.Context) (*database.Database, func(), error) {
-	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
-		return nil, nil, errors.New("DATABASE_URL environment variable is required")
+func setupDatabase(ctx context.Context, dsn, migrationsPath string) (*database.Database, func(), error) {
+	err := migration.Migrate(dsn, migrationsPath)
+	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return nil, nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
-	pool, err := pgxpool.New(ctx, databaseURL)
+	sqlDB, err := sql.Open("pgx", dsn)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create database pool: %w", err)
+		return nil, nil, err
+	}
+	if err := sqlDB.PingContext(ctx); err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	// Test the connection
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, nil, fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	db := database.NewDatabase(ctx, pool)
+	db := database.NewDatabase(ctx, sqlDB)
 	cleanup := func() {
-		pool.Close()
+		sqlDB.Close()
 	}
 
 	return db, cleanup, nil
@@ -273,7 +279,7 @@ func startAmberPriceService(ctx context.Context, db *database.Database, errChan 
 }
 
 func fetchAndStorePrices(ctx context.Context, svc interface {
-	GetPrices(ctx context.Context, siteID string) (model.AmberPrices, error)
+	GetPrices(ctx context.Context, siteID string) ([]models.Amberprice, error)
 }, db *database.Database, siteId string,
 ) error {
 	prices, err := svc.GetPrices(ctx, siteId)
@@ -332,14 +338,19 @@ func startWinetService(ctx context.Context, winetSvc winetSvc, errChan chan erro
 func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db *database.Database, logger *zap.Logger) error {
 	logger.Info("Starting HTTP server", zap.String("addr", serverAddr))
 
+	r := mux.NewRouter()
+	r.Use(mux.CORSMethodMiddleware(r))
+	apiHandler := api.HandlerWithOptions(server.New(winetSvc, db), api.GorillaServerOptions{
+		BaseRouter:  r,
+		Middlewares: []api.MiddlewareFunc{server.TimeoutMiddleware, server.LoggingMiddleware},
+		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			logger.Error("HTTP handler error", zap.Error(err))
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		},
+	})
+
 	srv := &http.Server{
-		Handler: api.HandlerWithOptions(server.New(winetSvc, db), api.GorillaServerOptions{
-			Middlewares: []api.MiddlewareFunc{server.TimeoutMiddleware, server.LoggingMiddleware},
-			ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
-				logger.Error("HTTP handler error", zap.Error(err))
-				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			},
-		}),
+		Handler:      apiHandler,
 		Addr:         serverAddr,
 		WriteTimeout: serverWriteTimeout,
 		ReadTimeout:  serverReadTimeout,
@@ -388,5 +399,3 @@ func handleErrors(ctx context.Context, errorChan chan error, logger *zap.Logger)
 		}
 	}
 }
-
-var errCron = errors.New("cron error")
