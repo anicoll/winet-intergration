@@ -8,14 +8,15 @@ import (
 	"net/http"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/anicoll/winet-integration/internal/pkg/model"
 	api "github.com/anicoll/winet-integration/pkg/server"
-	"go.uber.org/zap"
 )
 
 var _ api.ServerInterface = (*server)(nil)
 
-type winetService interface {
+type WinetService interface {
 	SendSelfConsumptionCommand() (bool, error)
 	SendBatteryStopCommand() (bool, error)
 	SetFeedInLimitation(feedinLimited bool) (bool, error)
@@ -33,13 +34,13 @@ type database interface {
 }
 
 type server struct {
-	winets winetService
+	winets WinetService
 	db     database
 	logger *zap.Logger
 	loc    *time.Location
 }
 
-func New(ws winetService, db database) *server {
+func New(ws WinetService, db database) *server {
 	return &server{
 		winets: ws,
 		logger: zap.L(),
