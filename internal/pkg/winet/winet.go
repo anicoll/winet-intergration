@@ -169,6 +169,7 @@ func (s *service) Connect(ctx context.Context) error {
 		s.logger.Error("failed to get properties", zap.Error(err))
 		return err
 	}
+	s.logger.Info("received properties")
 	return s.reconnect(ctx)
 }
 
