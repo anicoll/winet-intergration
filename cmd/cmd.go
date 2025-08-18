@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	paho_mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/gorilla/mux"
 	_ "github.com/jackc/pgx/v5/stdlib" // pgx as database/sql driver
@@ -25,6 +26,7 @@ import (
 	"github.com/anicoll/winet-integration/internal/pkg/database"
 	"github.com/anicoll/winet-integration/internal/pkg/database/migration"
 	"github.com/anicoll/winet-integration/internal/pkg/models"
+	"github.com/anicoll/winet-integration/internal/pkg/mqtt"
 	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 	"github.com/anicoll/winet-integration/internal/pkg/server"
 	"github.com/anicoll/winet-integration/internal/pkg/winet"
@@ -114,9 +116,22 @@ func run(ctx context.Context, cfg *config.Config) error {
 	_ = db
 	defer cleanup()
 
+	mqttOpts := paho_mqtt.NewClientOptions()
+	mqttOpts.SetPassword(cfg.MqttCfg.Password)
+	mqttOpts.SetUsername(cfg.MqttCfg.Username)
+	mqttOpts.AddBroker(cfg.MqttCfg.Host)
+
+	mqttPublisher := mqtt.New(paho_mqtt.NewClient(mqttOpts))
+	if err := mqttPublisher.Connect(); err != nil {
+		return fmt.Errorf("failed to connect to MQTT broker: %w", err)
+	}
 	// Register publishers
 	if err := publisher.RegisterPublisher("postgres", db); err != nil {
 		return fmt.Errorf("failed to register postgres publisher: %w", err)
+	}
+	// Register publishers
+	if err := publisher.RegisterPublisher("mqtt", mqttPublisher); err != nil {
+		return fmt.Errorf("failed to register mqtt publisher: %w", err)
 	}
 
 	// // Setup error channel with buffer
@@ -195,6 +210,17 @@ func setupDatabase(ctx context.Context, dsn, migrationsPath string) (*database.D
 
 	return db, cleanup, nil
 }
+
+// func setupMQTT(ctx context.Context, cfg config.WinetConfig) (*database.Database, func(), error) {
+// 	mqttCLient:=paho_mqtt.NewClient(&paho_mqtt.ClientOptions{
+// 		ClientID: "winet-integration",
+// 		Username: cfg.Username,
+// 		Password: cfg.Password,
+// 	})
+// 	mqttCLient.Connect()
+// 	mqtt.New(cfg.MqttCfg.Host, cfg.MqttCfg.Username, cfg.MqttCfg.Password)
+// 	return db, cleanup, nil
+// }
 
 func startDbCleanupService(ctx context.Context, db *database.Database, errChan chan error, logger *zap.Logger) error {
 	logger.Info("Starting database cleanup service")

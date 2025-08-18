@@ -21,6 +21,7 @@ func New(client paho_mqtt.Client) *service {
 }
 
 func (s *service) Connect() error {
+	configuredDevices = make(map[string]struct{})
 	token := s.client.Connect()
 	res := token.WaitTimeout(time.Second * 5)
 	if err := token.Error(); err != nil {

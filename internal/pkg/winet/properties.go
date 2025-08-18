@@ -17,6 +17,7 @@ func (s *service) getProperties(ctx context.Context) error {
 		return err
 	}
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	http.DefaultTransport.(*http.Transport).TLSHandshakeTimeout = 0
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err

@@ -21,7 +21,7 @@ func (s *service) Write(ctx context.Context, data []map[string]any) error {
 	return nil
 }
 
-func (s *service) RegisterDevice(device *model.Device) error {
+func (s *service) RegisterDevice(_ context.Context, device *model.Device) error {
 	if _, exists := configuredDevices[device.ID]; exists {
 		return nil
 	}
