@@ -20,7 +20,7 @@ require (
 	github.com/samber/lo v1.51.0
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v2 v2.27.7
-	go.uber.org/zap v1.27.0
+	go.uber.org/zap v1.27.1
 	golang.org/x/crypto v0.42.0
 	golang.org/x/sync v0.18.0
 )
