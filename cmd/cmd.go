@@ -25,6 +25,7 @@ import (
 	"github.com/anicoll/winet-integration/internal/pkg/config"
 	"github.com/anicoll/winet-integration/internal/pkg/database"
 	"github.com/anicoll/winet-integration/internal/pkg/database/migration"
+	"github.com/anicoll/winet-integration/internal/pkg/logic"
 	"github.com/anicoll/winet-integration/internal/pkg/models"
 	"github.com/anicoll/winet-integration/internal/pkg/mqtt"
 	"github.com/anicoll/winet-integration/internal/pkg/publisher"
@@ -113,7 +114,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to setup database: %w", err)
 	}
-	_ = db
+
 	defer cleanup()
 
 	mqttOpts := paho_mqtt.NewClientOptions()
@@ -141,10 +142,10 @@ func run(ctx context.Context, cfg *config.Config) error {
 	// // Start all services
 	eg, ctx := errgroup.WithContext(ctx)
 
-	// Start database cleanup service
-	eg.Go(func() error {
-		return startDbCleanupService(ctx, db, errorChan, logger)
-	})
+	// // Start database cleanup service
+	// eg.Go(func() error {
+	// 	return startDbCleanupService(ctx, db, errorChan, logger)
+	// })
 
 	// Start amber price processing service
 	eg.Go(func() error {
@@ -154,6 +155,15 @@ func run(ctx context.Context, cfg *config.Config) error {
 	// Start winet service with retry logic
 	eg.Go(func() error {
 		return startWinetService(ctx, winetSvc, errorChan, logger)
+	})
+	// Start decision logic service.
+	// eg.Go(func() error {
+	// 	return startDecisionService(ctx, winetSvc, db, errorChan, logger)
+	// })
+
+	// enable feedin at 5PM daily
+	eg.Go(func() error {
+		return dailyFeedinEnabler(ctx, winetSvc, logger)
 	})
 
 	// Start HTTP server
@@ -210,17 +220,6 @@ func setupDatabase(ctx context.Context, dsn, migrationsPath string) (*database.D
 
 	return db, cleanup, nil
 }
-
-// func setupMQTT(ctx context.Context, cfg config.WinetConfig) (*database.Database, func(), error) {
-// 	mqttCLient:=paho_mqtt.NewClient(&paho_mqtt.ClientOptions{
-// 		ClientID: "winet-integration",
-// 		Username: cfg.Username,
-// 		Password: cfg.Password,
-// 	})
-// 	mqttCLient.Connect()
-// 	mqtt.New(cfg.MqttCfg.Host, cfg.MqttCfg.Username, cfg.MqttCfg.Password)
-// 	return db, cleanup, nil
-// }
 
 func startDbCleanupService(ctx context.Context, db *database.Database, errChan chan error, logger *zap.Logger) error {
 	logger.Info("Starting database cleanup service")
@@ -357,6 +356,54 @@ func startWinetService(ctx context.Context, winetSvc winetSvc, errChan chan erro
 		case <-ctx.Done():
 			logger.Info("Winet service stopped")
 			return ctx.Err()
+		}
+	}
+}
+
+func dailyFeedinEnabler(ctx context.Context, winetSvc server.WinetService, logger *zap.Logger) error {
+	location, err := time.LoadLocation("Australia/Adelaide")
+	if err != nil {
+		return err
+	}
+	c := cron.New(cron.WithLocation(location))
+	if _, err := c.AddFunc("0 17 * * *", func() {
+		logger.Info("enabling feedin")
+		success, errr := winetSvc.SetFeedInLimitation(false)
+		if !success {
+			err = errr
+		}
+	}); err != nil {
+		return err
+	}
+	c.Start()
+	<-ctx.Done()
+	c.Stop()
+	return ctx.Err()
+}
+
+func startDecisionService(ctx context.Context, winetSvc server.WinetService, db *database.Database, errChan chan error, logger *zap.Logger) error {
+	logger.Info("Starting logic service")
+
+	svc := logic.NewLogicSvc(winetSvc, db)
+
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Info("logic service stopped")
+			return nil
+		default:
+			time.Sleep(5 * time.Second) // Delay to avoid tight loop
+
+			if err := svc.NextBestAction(ctx); err != nil {
+				logger.Error("logic service error", zap.Error(err))
+				select {
+				case errChan <- fmt.Errorf("%w: %v", errCron, err):
+				default:
+					logger.Warn("error channel full, dropping error")
+				}
+				return err
+			}
+			logger.Info("Next best action executed successfully")
 		}
 	}
 }

@@ -74,8 +74,10 @@ type (
 )
 
 const (
-	BatteryOperatorTextSensor TextSensor = "battery_operation_status"
-	RunningStatusTextSensor   TextSensor = "running_status"
+	BatteryOperatorTextSensor  TextSensor = "battery_operation_status"
+	BatteryOperatingTextSensor TextSensor = "battery_operating_status"
+	RunningStatusTextSensor    TextSensor = "running_status"
+	OperatingStatusTextSensor  TextSensor = "operating_status"
 )
 
 func (t TextSensor) String() string {
@@ -93,5 +95,7 @@ func (ts TextSensorz) HasSlug(slug string) bool {
 
 var TextSensors TextSensorz = TextSensorz{
 	BatteryOperatorTextSensor,
+	OperatingStatusTextSensor,
 	RunningStatusTextSensor,
+	BatteryOperatingTextSensor,
 }

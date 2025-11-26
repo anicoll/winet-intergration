@@ -1,11 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 
-	"github.com/anicoll/winet-integration/cmd"
+	"github.com/goburrow/modbus"
 	"github.com/urfave/cli/v2"
+
+	"github.com/anicoll/winet-integration/cmd"
 )
 
 //go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen --config=./gen/config.yaml ./gen/api.yaml
@@ -16,6 +19,7 @@ func main() {
 		Name:   "winet-controller",
 		Usage:  "controller for winet-s device",
 		Action: cmd.WinetCommand,
+		// Action: md,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "winet-password",
@@ -80,4 +84,32 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// WinetCommand is the main entry point for the winet integration CLI command.
+// It validates configuration and starts all required services.
+func md(ctx *cli.Context) error {
+	// Modbus TCP
+	// modbus.RTUClient()
+	// client := modbus.TCPClient("192.168.107.8:502")
+	handler := modbus.NewTCPClientHandler("192.168.107.8:502")
+	fmt.Println(handler.Connect())
+
+	// handler.SlaveId = byte('1')
+	client := modbus.NewClient(handler)
+	// Read input register 9
+	results, err := client.ReadHoldingRegisters(4990, 10)
+	if err != nil {
+		return err
+	}
+
+	// results, err = client.ReadDiscreteInputs(4990, 10)
+	// results, err = client.ReadDiscreteInputs(4989, 10)
+	// if err != nil {
+	// 	return err
+	// }
+	for _, res := range results {
+		fmt.Println(res)
+	}
+	return nil
 }

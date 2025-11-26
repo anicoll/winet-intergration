@@ -3,10 +3,13 @@ package database
 import (
 	"context"
 	"database/sql"
+	"iter"
+	"maps"
 	"time"
 
-	"github.com/anicoll/winet-integration/internal/pkg/models"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/anicoll/winet-integration/internal/pkg/models"
 )
 
 func (db *Database) GetProperties(ctx context.Context, identifier, slug string, from, to *time.Time) ([]models.Property, error) {
@@ -61,11 +64,13 @@ func scanProperties(rows *sql.Rows) ([]models.Property, error) {
 	return properties, nil
 }
 
-func (db *Database) GetLatestProperties(ctx context.Context) ([]models.Property, error) {
+func (db *Database) GetLatestProperties(ctx context.Context) (iter.Seq[models.Property], error) {
 	const query = `
-	SELECT DISTINCT ON (slug) id, time_stamp, unit_of_measurement, value, identifier, slug
+SELECT id, time_stamp, unit_of_measurement, value,identifier, slug
 	FROM Property
-	ORDER BY slug, time_stamp DESC;
+	where time_stamp > (NOW() - INTERVAL '1 day')
+	group by id, identifier, slug
+	order by "time_stamp" DESC
 	`
 
 	rows, err := db.db.QueryContext(ctx, query)
@@ -78,7 +83,16 @@ func (db *Database) GetLatestProperties(ctx context.Context) ([]models.Property,
 	if err != nil {
 		return nil, err
 	}
-	return properties, nil
+
+	propMap := map[string]models.Property{}
+	for _, prop := range properties {
+		key := prop.Identifier + "_" + prop.Slug
+		if _, ok := propMap[key]; !ok {
+			propMap[key] = prop
+		}
+	}
+
+	return maps.Values(propMap), nil
 }
 
 func (db *Database) GetAmberPrices(ctx context.Context, from, to time.Time, site *string) ([]models.Amberprice, error) {

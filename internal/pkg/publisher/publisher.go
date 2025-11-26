@@ -9,8 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anicoll/winet-integration/internal/pkg/model"
 	"go.uber.org/zap"
+
+	"github.com/anicoll/winet-integration/internal/pkg/model"
 )
 
 var errAlreadyRegistered = errors.New("publisher already registered")
@@ -120,8 +121,9 @@ func ignoreSlug(slug string) bool {
 		"meter_phase_a_current":            {},
 		"meter_phase_b_current":            {},
 		"meter_phase_c_current":            {},
-		"bus_voltate":                      {},
+		"bus_voltage":                      {},
 		"array_insulation_resistance":      {},
+		"battery_current":                  {},
 	}
 	_, exists := ignoredSlugs[slug]
 	return exists
