@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"iter"
 	"net/http"
 	"time"
 
@@ -28,7 +29,7 @@ type WinetService interface {
 }
 
 type database interface {
-	GetLatestProperties(ctx context.Context) ([]models.Property, error)
+	GetLatestProperties(ctx context.Context) (iter.Seq[models.Property], error)
 	GetProperties(ctx context.Context, identifier, slug string, from, to *time.Time) ([]models.Property, error)
 	GetAmberPrices(ctx context.Context, from, to time.Time, site *string) ([]models.Amberprice, error)
 }
@@ -207,8 +208,12 @@ func (s *server) GetProperties(w http.ResponseWriter, r *http.Request) {
 		handleError(w, err)
 		return
 	}
+	properties := []models.Property{}
+	for prop := range props {
+		properties = append(properties, prop)
+	}
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(props); err != nil {
+	if err := json.NewEncoder(w).Encode(properties); err != nil {
 		handleError(w, err)
 		return
 	}
