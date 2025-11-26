@@ -2,7 +2,7 @@ module github.com/anicoll/winet-integration
 
 go 1.24.0
 
-toolchain go1.24.7
+toolchain go1.25.4
 
 require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
