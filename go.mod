@@ -14,7 +14,7 @@ require (
 	github.com/gosimple/slug v1.15.0
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/lib/pq v1.10.9
-	github.com/oapi-codegen/oapi-codegen/v2 v2.5.0
+	github.com/oapi-codegen/oapi-codegen/v2 v2.5.1
 	github.com/oapi-codegen/runtime v1.1.2
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/samber/lo v1.51.0
