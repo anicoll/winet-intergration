@@ -1,0 +1,516 @@
+# Refactor Plan: winet-integration
+
+This document outlines a phased refactor of the winet-integration service. The goal is to
+fix critical bugs, improve composability, adopt modern tooling, and make the codebase
+testable and maintainable.
+
+---
+
+## Current Architecture Problems
+
+Before the steps, here is a summary of the bugs and structural issues driving this plan.
+
+### Critical Bugs
+
+#### 1. `timeoutErrChan` nil-channel panic
+**File:** [internal/pkg/winet/winet.go](../internal/pkg/winet/winet.go)
+
+`SubscribeToTimeout()` initialises `s.timeoutErrChan` and returns it. However, in
+[cmd/cmd.go](../cmd/cmd.go), `Connect()` is called first, and `SubscribeToTimeout()` is
+called afterward. During the `Connect()` flow, if the server sends `"login timeout"`, the
+handler tries to send to `s.timeoutErrChan` — which is `nil`. Sending to a nil channel
+blocks forever; the goroutine hangs silently.
+
+**Fix:** Initialise `timeoutErrChan` in `New()`, not lazily in `SubscribeToTimeout()`.
+
+---
+
+#### 2. Reconnect does not close the old connection
+**File:** [internal/pkg/winet/winet.go:138](../internal/pkg/winet/winet.go#L138)
+
+`reconnect()` creates a brand-new `ws.New()` struct and assigns it to `s.conn`, but the
+old connection's goroutines (`readLoop`, `setupPing`) are still running. They hold a
+closure over the old `*Conn`, and will continue calling `s.onMessage` and `s.onError`
+on the live `*service`. This creates a race condition where two goroutines are
+simultaneously processing messages and mutating shared state (`s.storedData`,
+`s.currentDevice`, `s.token`).
+
+**Fix:** Call `s.conn.Close()` before assigning a new connection.
+
+---
+
+#### 3. `processed` channel deadlock on disconnect
+**Files:** [internal/pkg/winet/devicelist.go](../internal/pkg/winet/devicelist.go),
+[internal/pkg/winet/real.go](../internal/pkg/winet/real.go),
+[internal/pkg/winet/inverter_commands.go](../internal/pkg/winet/inverter_commands.go)
+
+`handleDeviceListMessage` calls `s.waiter()` which blocks on `<-s.processed`. The signal
+is sent from `handleRealMessage` or `handleDirectMessage`. If the WebSocket connection
+drops between sending a query and receiving its response, the signal is never sent and
+`waiter()` blocks forever.
+
+Consequences:
+- The device list goroutine hangs indefinitely.
+- Any HTTP request that calls an inverter command (`SendChargeCommand`, etc.) also calls
+  `s.waiter()` and deadlocks.
+- On reconnect, a new `handleDeviceListMessage` goroutine starts, but the old one is
+  still blocked. Now two goroutines race to send `sendDeviceListRequest`.
+
+**Fix:** Replace the bare channel block with a `select` that also handles `ctx.Done()` and
+a timeout. Use a proper request/response correlation map (`map[requestID]chan<- response`)
+so commands can be matched to their responses individually.
+
+---
+
+#### 4. Multiple concurrent `handleDeviceListMessage` goroutines
+**File:** [internal/pkg/winet/winet.go:117](../internal/pkg/winet/winet.go#L117)
+
+`onMessage` dispatches `handleDeviceListMessage` with `go`. Each invocation runs a full
+polling loop: send queries, wait, sleep, send another device list request, recurse. On
+reconnect this accumulates goroutines. Each goroutine independently polls and sends
+requests, leading to duplicate data and message ordering violations.
+
+**Fix:** The polling loop belongs in a dedicated, single goroutine owned by `Connect()`,
+not inside the message handler.
+
+---
+
+#### 5. `ticker` not stopped in `handleDeviceListMessage`
+**File:** [internal/pkg/winet/devicelist.go:53](../internal/pkg/winet/devicelist.go#L53)
+
+```go
+ticker := time.NewTicker(time.Second * s.cfg.PollInterval)
+<-ticker.C
+s.sendDeviceListRequest(c)
+```
+
+`ticker.Stop()` is never called. Minor goroutine/timer leak that compounds with bug #4.
+
+---
+
+#### 6. `sendIfErr` does not stop execution
+**File:** [internal/pkg/winet/winet.go:45](../internal/pkg/winet/winet.go#L45)
+
+`sendIfErr` sends an error to the channel and returns. The caller continues executing.
+For example in `onconnect`, after a marshal error the code proceeds to call `c.Send` with
+garbage data. In `handleDirectMessage`, after a float parse error, computation continues
+with zero values. All of these should `return` after the error.
+
+---
+
+#### 7. `http.DefaultTransport` mutated globally
+**File:** [internal/pkg/winet/properties.go:19](../internal/pkg/winet/properties.go#L19)
+
+```go
+http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+```
+
+This mutates the global default HTTP transport for the entire process. Any subsequent
+outbound HTTP request (e.g., to the Amber API) inherits the insecure TLS config.
+
+**Fix:** Use a dedicated `http.Client` with its own transport for the properties fetch.
+
+---
+
+#### 8. `currentDevice` race condition
+**Files:** [internal/pkg/winet/devicelist.go](../internal/pkg/winet/devicelist.go),
+[internal/pkg/winet/real.go](../internal/pkg/winet/real.go),
+[internal/pkg/winet/direct.go](../internal/pkg/winet/direct.go)
+
+`handleDeviceListMessage` writes `s.currentDevice` while `handleRealMessage` and
+`handleDirectMessage` (both called with `go`) read it. No mutex protects this field.
+
+---
+
+#### 9. `handleDirectMessage` never publishes data
+**File:** [internal/pkg/winet/direct.go:83](../internal/pkg/winet/direct.go#L83)
+
+The function builds `datapointsToPublish` but never calls `publisher.PublishData`. It
+also uses `data.CurrentUnit` as the unit for the computed power field instead of `"W"`.
+
+---
+
+#### 10. Global publisher registry has no mutex
+**File:** [internal/pkg/publisher/publisher.go:19](../internal/pkg/publisher/publisher.go#L19)
+
+`registerdPublishers` is a plain `map[string]publisher`. `RegisterPublisher` writes to it
+and `PublishData` / `RegisterDevice` iterate over it without any synchronisation.
+
+---
+
+#### 11. `GetLatestProperties` SQL is incorrect
+**File:** [internal/pkg/database/read.go:68](../internal/pkg/database/read.go#L68)
+
+```sql
+GROUP BY id, identifier, slug
+```
+
+Grouping by `id` (the primary key) makes the GROUP BY a no-op — every row is unique.
+The actual deduplication to "latest per identifier+slug" happens entirely in Go with a
+`map`, making the SQL aggregation pointless and fetching far more data than necessary.
+
+**Fix:** Use a window function or `DISTINCT ON (identifier, slug) ORDER BY slug, time_stamp DESC`.
+
+---
+
+#### 12. `MqttCfg` reuses the wrong config type
+**File:** [internal/pkg/config/config.go](../internal/pkg/config/config.go)
+
+`MqttCfg *WinetConfig` reuses the Winet config struct, which contains `Ssl bool` and
+`PollInterval time.Duration` — neither of which applies to MQTT.
+
+---
+
+#### 13. Amber configuration not in the config struct
+**File:** [cmd/cmd.go:256](../cmd/cmd.go#L256)
+
+`AMBER_HOST` and `AMBER_TOKEN` are read from environment variables inside
+`startAmberPriceService`. They are invisible in the config struct and cannot be validated
+at startup or passed in tests.
+
+---
+
+#### 14. `contxt` package creates detached contexts
+**File:** [internal/pkg/contxt/contxt.go](../internal/pkg/contxt/contxt.go)
+
+`contxt.NewContext(time.Second*5)` creates a context with a 5-second timeout derived from
+`context.Background()`, not from the parent. If the parent context is cancelled (shutdown),
+in-flight publish operations still run for up to 5 seconds.
+
+---
+
+#### 15. Mixed database access patterns
+The codebase mixes three approaches:
+- Raw SQL strings with `database/sql` in `write.go` and `read.go`
+- Generated `dbtpl` models called as methods (`prop.Insert(ctx, db)`) in `write.go`
+- Both `jackc/pgx/v5` and `github.com/lib/pq` are imported as drivers
+
+This makes it hard to reason about queries, prevents type-safe parameter binding, and the
+`dbtpl` generator is non-standard with very little community support.
+
+---
+
+#### 16. Commented-out services with no clear path forward
+`startDbCleanupService` and `startDecisionService` are fully commented out in `cmd.go`.
+`dailyFeedinEnabler` is hardcoded to 5 PM Adelaide time with no configuration.
+
+---
+
+## Refactor Steps
+
+---
+
+### Step 1 — Fix critical websocket bugs (targeted, surgical)
+
+**Goal:** Stop crashes and deadlocks without restructuring the code yet.
+
+Changes:
+- Initialise `timeoutErrChan` with buffer 1 in `New()`, remove lazy init from `SubscribeToTimeout()`.
+- In `reconnect()`, call `s.conn.Close()` before creating a new connection.
+- Add `defer ticker.Stop()` in `handleDeviceListMessage`.
+- Add `ctx.Done()` arm and a configurable timeout to `s.waiter()`.
+- Add a mutex to guard `s.currentDevice` reads/writes.
+- Fix `sendIfErr` callers to `return` after calling it (or convert handlers to return errors).
+- Fix `handleDirectMessage` to call `publisher.PublishData` and use `"W"` for the power unit.
+- Add `sync.RWMutex` to the global publisher registry.
+
+**Testing:** Run existing `pkg/sockets` tests. Add a new winet protocol unit test using a
+mock WebSocket server that simulates a "login timeout" mid-session.
+
+---
+
+### Step 2 — Fix `http.DefaultTransport` mutation and config types
+
+**Goal:** Eliminate global side effects and mistyped config.
+
+Changes:
+- In `properties.go`, replace `http.DefaultClient` usage with a locally constructed
+  `*http.Client` that has its own `*http.Transport` with `InsecureSkipVerify` scoped only
+  to that client.
+- Add a dedicated `MQTTConfig` struct to `internal/pkg/config`:
+  ```go
+  type MQTTConfig struct {
+      Host     string
+      Username string
+      Password string
+  }
+  ```
+- Add `AmberConfig` to the config struct:
+  ```go
+  type AmberConfig struct {
+      Host  string
+      Token string
+  }
+  ```
+- Add configurable `Timezone string` field (default `"Australia/Adelaide"`).
+- Validate all required fields at startup in one place.
+
+**Testing:** Add config validation unit tests.
+
+---
+
+### Step 3 — Restructure the winet service (major)
+
+**Goal:** Replace the monolithic `service` struct with composable, testable pieces.
+
+The current struct does: connection management, protocol parsing, message dispatch,
+polling loop, command sending, and data publishing — all tightly coupled.
+
+Proposed split:
+
+```
+internal/pkg/winet/
+  session/
+    session.go      -- manages a single connected WebSocket session lifecycle
+    reconnect.go    -- retry/backoff logic around session
+  protocol/
+    messages.go     -- request/response types (move from model/)
+    handler.go      -- stateless message parsing and dispatch
+  poller/
+    poller.go       -- the device poll loop (owns the goroutine, cancellable via context)
+  commands/
+    commands.go     -- inverter command builders and response correlation
+```
+
+Key design changes:
+- **Eliminate `processed` channel.** Replace with a `pendingRequests` map:
+  ```go
+  type pendingRequests struct {
+      mu      sync.Mutex
+      pending map[string]chan<- response  // keyed by request correlation ID
+  }
+  ```
+  Each command sends a request, registers a channel, then selects on `ctx.Done()` or the
+  channel. The message handler looks up the correlation ID and routes the response.
+- **Polling loop owned by context.** `poller.Run(ctx, conn)` runs a single goroutine.
+  Cancelling `ctx` is the only way to stop it. No recursion, no ticker leak.
+- **Session lifecycle events via channel, not callbacks.** Replace the current
+  `SubscribeToTimeout()` with a `<-chan SessionEvent` that emits `Connected`,
+  `Disconnected`, and `Error` events. The reconnect loop in `cmd.go` reacts to these.
+
+---
+
+### Step 4 — Replace `dbtpl` with `sqlc`
+
+**Goal:** Type-safe, maintainable SQL with a widely-supported code generator.
+
+Tooling:
+- Use [sqlc](https://sqlc.dev) to generate Go code from SQL queries.
+- Use `pgx/v5` directly (drop `lib/pq` entirely).
+- Drop the `database/sql` wrapper; use `pgxpool.Pool` directly.
+
+Steps:
+1. Add a `sqlc.yaml` config at the project root pointing at the migrations folder.
+2. Write SQL query files in `internal/pkg/database/queries/`:
+   - `properties.sql` — insert, latest-per-device (fixed with `DISTINCT ON`), range query
+   - `devices.sql` — upsert
+   - `amber_prices.sql` — upsert, range query
+3. Run `sqlc generate` to produce typed structs and query functions in
+   `internal/pkg/database/sqlc/`.
+4. Delete the `internal/pkg/models/` directory and all `*.dbtpl.go` files.
+5. Update all callers to use the generated sqlc functions.
+6. Fix the `GetLatestProperties` query:
+   ```sql
+   -- name: GetLatestProperties :many
+   SELECT DISTINCT ON (identifier, slug)
+       id, time_stamp, unit_of_measurement, value, identifier, slug
+   FROM property
+   WHERE time_stamp > NOW() - INTERVAL '1 day'
+   ORDER BY identifier, slug, time_stamp DESC;
+   ```
+7. Remove `github.com/lib/pq` from `go.mod`.
+
+**Testing:** Add integration tests using `testcontainers-go` to spin up a real Postgres
+instance and verify all query functions against actual schema migrations.
+
+---
+
+### Step 5 — Replace global publisher with dependency injection
+
+**Goal:** Remove the global registry; make the publishing pipeline testable.
+
+Currently `publisher.RegisterPublisher` and `publisher.PublishData` use package-level
+globals. This makes unit testing impossible without registering real publishers.
+
+Changes:
+- Define a `Publisher` interface:
+  ```go
+  type Publisher interface {
+      RegisterDevice(ctx context.Context, device *model.Device) error
+      Write(ctx context.Context, data []DataPoint) error
+  }
+  ```
+- Create a `MultiPublisher` that fans out to a slice of `Publisher` implementations.
+- Inject `MultiPublisher` into the winet service and the poller, eliminating all
+  package-level state.
+- Move the slug-ignore list and unit normalization logic into a `Normalizer` type so it
+  can be tested independently.
+
+**Testing:** Unit test the normalizer with table-driven tests. Test `MultiPublisher`
+fan-out with mock publishers.
+
+---
+
+### Step 6 — Replace gorilla/mux with `net/http` (Go 1.22+)
+
+**Goal:** Reduce dependencies; use stdlib routing.
+
+Go 1.22 added method and path parameter support to `net/http.ServeMux`. Since the project
+already targets Go 1.26, gorilla/mux adds no value.
+
+Changes:
+- Remove `github.com/gorilla/mux` from `go.mod`.
+- Update `cmd/cmd.go` `startHTTPServer` to use `http.NewServeMux()`.
+- Update the `oapi-codegen` config (`gen/config.yaml`) to use the `std-http-server` target
+  instead of `gorilla` so the generated handler registration uses stdlib.
+- Fix `GetPropertyIdentifierSlug`: set `Content-Type` header before calling
+  `json.NewEncoder(w).Encode(...)`.
+- Fix `handleError` to distinguish 4xx vs 5xx errors (currently always returns 500).
+- Add `http.StatusNoContent` where endpoints write no body on success instead of writing
+  the string `"success"`.
+
+---
+
+### Step 7 — Configuration: env vars + YAML with validation
+
+**Goal:** Single, validated, fully-documented config source.
+
+Use [github.com/caarlos0/env/v11](https://github.com/caarlos0/env) for env-var parsing
+into typed structs (zero dependency, no reflection magic, no global state).
+
+Config struct:
+```go
+type Config struct {
+    Winet struct {
+        Host         string        `env:"WINET_HOST,required"`
+        Username     string        `env:"WINET_USERNAME,required"`
+        Password     string        `env:"WINET_PASSWORD,required"`
+        SSL          bool          `env:"WINET_SSL"`
+        PollInterval time.Duration `env:"WINET_POLL_INTERVAL" envDefault:"30s"`
+    }
+    MQTT struct {
+        Host     string `env:"MQTT_HOST"`
+        Username string `env:"MQTT_USERNAME"`
+        Password string `env:"MQTT_PASSWORD"`
+    }
+    Amber struct {
+        Host  string `env:"AMBER_HOST"`
+        Token string `env:"AMBER_TOKEN"`
+    }
+    Database struct {
+        DSN              string `env:"DATABASE_URL,required"`
+        MigrationsFolder string `env:"MIGRATIONS_FOLDER" envDefault:"migrations"`
+    }
+    Timezone string `env:"TIMEZONE" envDefault:"Australia/Adelaide"`
+    LogLevel string `env:"LOG_LEVEL"       envDefault:"info"`
+}
+```
+
+- Remove `github.com/urfave/cli/v2`. The CLI adds no value since all config comes from
+  env vars. Replace with a simple `main.go` that parses env, validates, and calls `run()`.
+- Retain the existing `config.yaml` as documentation of all supported env vars.
+- Add a startup validation step that checks all `required` fields and logs actionable
+  errors before attempting any connections.
+
+---
+
+### Step 8 — Reconnect and session management (follow-up to Step 3)
+
+**Goal:** Robust, observable reconnect behaviour.
+
+The current retry loop in `startWinetService` has a fixed 5-second sleep with no
+backoff. On repeated failures (e.g., inverter rebooting) this hammers the device.
+
+Changes:
+- Implement exponential backoff with jitter using the standard pattern:
+  ```go
+  backoff := min(baseDelay * (1 << attempt), maxDelay)
+  sleep(backoff + jitter())
+  ```
+- Expose a `HealthStatus` (connected/disconnected/reconnecting) via the HTTP server
+  at `GET /health`.
+- Log each reconnect attempt with the backoff duration and attempt count.
+- After `maxAttempts` consecutive failures, surface a fatal error to the errgroup so
+  the process exits with a non-zero code and can be restarted by the container runtime.
+
+---
+
+### Step 9 — Re-enable and complete the commented-out services
+
+**Goal:** Restore `startDbCleanupService` and `startDecisionService` to working order.
+
+`startDbCleanupService`:
+- Was commented out with no explanation. Re-enable it; it is a simple cron job.
+- Make the cleanup schedule configurable via env var.
+
+`startDecisionService` / `logic.NextBestAction`:
+- Logic is incomplete: the charge/feedin decision is made but there is no hysteresis
+  (if price fluctuates around zero, the inverter is toggled every 5 seconds).
+- Add a minimum dwell time before switching modes (e.g., 5 minutes).
+- Add logging for every decision with the current price and action taken.
+- Make the poll interval configurable; remove the hardcoded `time.Sleep(5 * time.Second)`.
+
+`dailyFeedinEnabler`:
+- Move the 5 PM schedule into the config struct as a cron expression.
+- Make the timezone derive from `Config.Timezone` instead of a hardcoded string.
+
+---
+
+### Step 10 — Testing infrastructure
+
+**Goal:** Meaningful test coverage at all layers.
+
+| Layer | Tool | What to test |
+|---|---|---|
+| Websocket (`pkg/sockets`) | existing `httptest` approach | expand: close-during-read, ping-stop-on-close, callback ordering |
+| Winet protocol | mock WS server | login flow, timeout handling, reconnect, command/response correlation |
+| DB queries | `testcontainers-go` + real Postgres | all sqlc queries, migration correctness, DISTINCT ON dedup |
+| Publisher | mock `Publisher` | normalizer unit conversion, slug-ignore list, fan-out |
+| HTTP server | `net/http/httptest` | all endpoints, 4xx/5xx error mapping |
+| Logic | mock winet + mock DB | `NextBestAction` decision table |
+
+Add a `make test` target that runs unit tests and a separate `make test-integration`
+target that requires Docker (for `testcontainers-go`).
+
+---
+
+## Dependency Changes Summary
+
+| Action | Package |
+|---|---|
+| Add | `github.com/caarlos0/env/v11` |
+| Add | `github.com/sqlc-dev/sqlc` (codegen tool only, `tools.go`) |
+| Add | `github.com/testcontainers/testcontainers-go` (test only) |
+| Remove | `github.com/gorilla/mux` |
+| Remove | `github.com/lib/pq` |
+| Remove | `github.com/urfave/cli/v2` |
+| Remove | `github.com/gosimple/slug` (replace with inline `strings.NewReplacer`) |
+| Keep | `github.com/gorilla/websocket` |
+| Keep | `github.com/eclipse/paho.mqtt.golang` |
+| Keep | `github.com/golang-migrate/migrate/v4` |
+| Keep | `github.com/jackc/pgx/v5` |
+| Keep | `github.com/oapi-codegen/oapi-codegen/v2` |
+| Keep | `github.com/robfig/cron/v3` |
+| Keep | `go.uber.org/zap` |
+| Keep | `golang.org/x/sync` |
+
+---
+
+## Execution Order
+
+Steps are ordered to avoid blocking on each other. Steps 1 and 2 are safe to do on
+`main` immediately (bug fixes). Steps 3–7 are best done on a feature branch together
+since they touch the same files. Steps 8–10 build on top.
+
+```
+Step 1  Fix websocket bugs          → merge to main (hotfix)
+Step 2  Fix transport + config types → merge to main (hotfix)
+Step 3  Restructure winet service   ─┐
+Step 4  sqlc migration               ├─ feature/refactor branch
+Step 5  DI publisher                 │
+Step 6  stdlib HTTP                  │
+Step 7  Config/CLI removal          ─┘ → merge to main
+Step 8  Reconnect backoff           → main
+Step 9  Re-enable services          → main
+Step 10 Testing infrastructure      → ongoing, parallel with all steps
+```
