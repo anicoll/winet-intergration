@@ -1,8 +1,6 @@
 module github.com/anicoll/winet-integration
 
-go 1.24.0
-
-toolchain go1.26.0
+go 1.26.0
 
 require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
@@ -35,8 +33,6 @@ require (
 	github.com/goburrow/serial v0.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gosimple/unidecode v1.0.1 // indirect
-	github.com/hashicorp/errwrap v1.1.0 // indirect
-	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
