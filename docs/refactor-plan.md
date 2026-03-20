@@ -593,7 +593,7 @@ Step 2  Fix transport + config types ✅ merged to main
 Step 3  Restructure winet service   ✅ merged to main
 Step 4  sqlc migration               ─┐  ✅ done (feature/refactor branch)
 Step 5  DI publisher                  ├─ ✅ done (feature/refactor branch)
-Step 6  stdlib HTTP                   │
+Step 6  stdlib HTTP                   ├─ ✅ done (feature/refactor branch)
 Step 7  Config/CLI removal           ─┘ → merge to main
 Step 8  Reconnect backoff           → main
 Step 9  Re-enable services          → main
