@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"net/url"
+	"sync"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -18,6 +20,8 @@ var ErrTimeout = errors.New("timeout")
 
 const EnglishLang string = "en_us"
 
+const waiterTimeout = 30 * time.Second
+
 type service struct {
 	cfg            *config.WinetConfig
 	properties     map[string]string
@@ -27,18 +31,21 @@ type service struct {
 	token          string
 	logger         *zap.Logger
 	storedData     []byte
+	ctx            context.Context // set in Connect; used by waiter
 
+	deviceMu      sync.RWMutex
 	currentDevice *model.Device
 	processed     chan any // used to communicate when messages are processed.
 }
 
 func New(cfg *config.WinetConfig, errChan chan error) *service {
 	return &service{
-		cfg:        cfg,
-		errChan:    errChan,
-		logger:     zap.L(), // returns the global logger.
-		storedData: []byte{},
-		processed:  make(chan any),
+		cfg:            cfg,
+		errChan:        errChan,
+		logger:         zap.L(), // returns the global logger.
+		storedData:     []byte{},
+		processed:      make(chan any),
+		timeoutErrChan: make(chan error, 1),
 	}
 }
 
@@ -58,12 +65,15 @@ func (s *service) onconnect(c ws.Connection) {
 			Token:   s.token,
 		},
 	})
-	s.sendIfErr(err)
+	if err != nil {
+		s.sendIfErr(err)
+		return
+	}
 	s.logger.Debug("sending msg", zap.ByteString("request", data), zap.String("query_stage", model.Connect.String()))
-	err = c.Send(ws.Msg{
-		Body: data,
-	})
-	s.sendIfErr(err)
+	if err = c.Send(ws.Msg{Body: data}); err != nil {
+		s.sendIfErr(err)
+		return
+	}
 	s.logger.Debug("msg sent", zap.String("query_stage", model.Connect.String()))
 }
 
@@ -136,6 +146,16 @@ func (s *service) onError(err error) {
 }
 
 func (s *service) reconnect(ctx context.Context) error {
+	// Close the old connection before creating a new one. Without this, the old
+	// connection's readLoop and setupPing goroutines keep running and continue
+	// calling onMessage/onError on this service, racing with the new session.
+	if s.conn != nil {
+		if err := s.conn.Close(); err != nil {
+			s.logger.Warn("error closing previous connection", zap.Error(err))
+		}
+		s.conn = nil
+	}
+
 	var u url.URL
 	if s.cfg.Ssl {
 		u = url.URL{Scheme: "wss", Host: s.cfg.Host + ":443", Path: "/ws/home/overview"}
@@ -145,7 +165,7 @@ func (s *service) reconnect(ctx context.Context) error {
 
 	s.logger.Debug("connecting to", zap.String("url", u.String()))
 
-	s.token = "" // clear it out just incase.
+	s.token = "" // clear it out just in case.
 
 	s.conn = ws.New(
 		ws.OnConnected(s.onconnect),
@@ -165,6 +185,7 @@ func (s *service) reconnect(ctx context.Context) error {
 }
 
 func (s *service) Connect(ctx context.Context) error {
+	s.ctx = ctx
 	if err := s.getProperties(ctx); err != nil {
 		s.logger.Error("failed to get properties", zap.Error(err))
 		return err
@@ -174,6 +195,20 @@ func (s *service) Connect(ctx context.Context) error {
 }
 
 func (s *service) SubscribeToTimeout() <-chan error {
-	s.timeoutErrChan = make(chan error, 1)
 	return s.timeoutErrChan
+}
+
+// waiter blocks until a response is published to the processed channel, the
+// parent context is cancelled, or the waiterTimeout elapses. It returns the
+// value and a non-nil error on the latter two cases so callers can bail out
+// instead of deadlocking.
+func (s *service) waiter() (any, error) {
+	select {
+	case <-s.ctx.Done():
+		return nil, s.ctx.Err()
+	case <-time.After(waiterTimeout):
+		return nil, errors.New("timed out waiting for device response")
+	case v := <-s.processed:
+		return v, nil
+	}
 }

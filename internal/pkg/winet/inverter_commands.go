@@ -44,16 +44,24 @@ func (s *service) SendSelfConsumptionCommand() (bool, error) {
 			},
 		},
 	})
-	s.sendIfErr(err)
+	if err != nil {
+		return false, err
+	}
 	if s.conn == nil {
 		return false, fmt.Errorf("connection is nil, cannot send command")
 	}
-	s.sendIfErr(s.conn.Send(ws.Msg{
-		Body: data,
-	}))
-	res := s.waiter()
-	result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
-	s.logger.Info("SendSelfConsumptionCommand", zap.Any("any", res))
+	if err = s.conn.Send(ws.Msg{Body: data}); err != nil {
+		return false, err
+	}
+	res, err := s.waiter()
+	if err != nil {
+		return false, err
+	}
+	result, ok := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
+	if !ok {
+		return false, fmt.Errorf("unexpected response type: %T", res)
+	}
+	s.logger.Info("SendSelfConsumptionCommand", zap.Any("any", result))
 	return result.ResultMessage == "success", nil
 }
 
@@ -101,13 +109,24 @@ func (s *service) SendDischargeCommand(dischargePower string) (bool, error) {
 			},
 		},
 	})
-	s.sendIfErr(err)
-	s.sendIfErr(s.conn.Send(ws.Msg{
-		Body: data,
-	}))
-	res := s.waiter()
-	result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
-	s.logger.Info("SendSelfConsumptionCommand", zap.Any("any", res))
+	if err != nil {
+		return false, err
+	}
+	if s.conn == nil {
+		return false, fmt.Errorf("connection is nil, cannot send command")
+	}
+	if err = s.conn.Send(ws.Msg{Body: data}); err != nil {
+		return false, err
+	}
+	res, err := s.waiter()
+	if err != nil {
+		return false, err
+	}
+	result, ok := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
+	if !ok {
+		return false, fmt.Errorf("unexpected response type: %T", res)
+	}
+	s.logger.Info("SendDischargeCommand", zap.Any("any", result))
 	return result.ResultMessage == "success", nil
 }
 
@@ -155,13 +174,24 @@ func (s *service) SendChargeCommand(chargePower string) (bool, error) {
 			},
 		},
 	})
-	s.sendIfErr(err)
-	s.sendIfErr(s.conn.Send(ws.Msg{
-		Body: data,
-	}))
-	res := s.waiter()
-	result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
-	s.logger.Info("SendSelfConsumptionCommand", zap.Any("any", res))
+	if err != nil {
+		return false, err
+	}
+	if s.conn == nil {
+		return false, fmt.Errorf("connection is nil, cannot send command")
+	}
+	if err = s.conn.Send(ws.Msg{Body: data}); err != nil {
+		return false, err
+	}
+	res, err := s.waiter()
+	if err != nil {
+		return false, err
+	}
+	result, ok := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
+	if !ok {
+		return false, fmt.Errorf("unexpected response type: %T", res)
+	}
+	s.logger.Info("SendChargeCommand", zap.Any("any", result))
 	return result.ResultMessage == "success", nil
 }
 
@@ -201,13 +231,24 @@ func (s *service) SendBatteryStopCommand() (bool, error) {
 			},
 		},
 	})
-	s.sendIfErr(err)
-	s.sendIfErr(s.conn.Send(ws.Msg{
-		Body: data,
-	}))
-	res := s.waiter()
-	result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
-	s.logger.Info("SendBatteryStopCommand", zap.Any("any", res))
+	if err != nil {
+		return false, err
+	}
+	if s.conn == nil {
+		return false, fmt.Errorf("connection is nil, cannot send command")
+	}
+	if err = s.conn.Send(ws.Msg{Body: data}); err != nil {
+		return false, err
+	}
+	res, err := s.waiter()
+	if err != nil {
+		return false, err
+	}
+	result, ok := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
+	if !ok {
+		return false, fmt.Errorf("unexpected response type: %T", res)
+	}
+	s.logger.Info("SendBatteryStopCommand", zap.Any("any", result))
 	return result.ResultMessage == "success", nil
 }
 
@@ -236,12 +277,23 @@ func (s *service) SendInverterStateChangeCommand(disable bool) (bool, error) {
 			},
 		},
 	})
-	s.sendIfErr(err)
-	s.sendIfErr(s.conn.Send(ws.Msg{
-		Body: data,
-	}))
-
-	result := s.waiter().(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
+	if err != nil {
+		return false, err
+	}
+	if s.conn == nil {
+		return false, fmt.Errorf("connection is nil, cannot send command")
+	}
+	if err = s.conn.Send(ws.Msg{Body: data}); err != nil {
+		return false, err
+	}
+	res, err := s.waiter()
+	if err != nil {
+		return false, err
+	}
+	result, ok := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
+	if !ok {
+		return false, fmt.Errorf("unexpected response type: %T", res)
+	}
 	s.logger.Info("SendInverterStateChangeCommand", zap.Any("any", result))
 	return result.ResultMessage == "success", nil
 }
@@ -293,20 +345,33 @@ func (s *service) SetFeedInLimitation(feedinLimited bool) (bool, error) {
 		PackNumTotal:   1,
 		List:           paramRequests,
 	})
-	s.sendIfErr(err)
-	s.sendIfErr(s.conn.Send(ws.Msg{
-		Body: data,
-	}))
-	res := s.waiter()
-	result := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
-	s.logger.Info("SendSelfConsumptionCommand", zap.Any("any", res))
+	if err != nil {
+		return false, err
+	}
+	if s.conn == nil {
+		return false, fmt.Errorf("connection is nil, cannot send command")
+	}
+	if err = s.conn.Send(ws.Msg{Body: data}); err != nil {
+		return false, err
+	}
+	res, err := s.waiter()
+	if err != nil {
+		return false, err
+	}
+	result, ok := res.(model.ParsedResult[model.GenericReponse[model.InverterParamResponse]])
+	if !ok {
+		return false, fmt.Errorf("unexpected response type: %T", res)
+	}
+	s.logger.Info("SetFeedInLimitation", zap.Any("any", result))
 	return result.ResultMessage == "success", nil
 }
 
 func (s *service) handleParamMessage(data []byte, _ ws.Connection) {
 	res := model.ParsedResult[model.GenericReponse[model.InverterParamResponse]]{}
-	err := json.Unmarshal(data, &res)
-	s.sendIfErr(err)
+	if err := json.Unmarshal(data, &res); err != nil {
+		s.sendIfErr(err)
+		return
+	}
 	s.logger.Info("param_message", zap.Any("payload", res))
 
 	s.processed <- res

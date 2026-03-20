@@ -18,20 +18,24 @@ func (s *service) sendDeviceListRequest(c ws.Connection) {
 		},
 		Type: "0",
 	})
-	s.sendIfErr(err)
-	err = c.Send(ws.Msg{
-		Body: request,
-	})
-
-	s.sendIfErr(err)
+	if err != nil {
+		s.sendIfErr(err)
+		return
+	}
+	if err = c.Send(ws.Msg{Body: request}); err != nil {
+		s.sendIfErr(err)
+		return
+	}
 	s.logger.Debug("sent msg", zap.String("query_stage", model.DeviceList.String()))
 }
 
 // handleLoginMessage consumes Login response and calls DeviceList.
 func (s *service) handleLoginMessage(data []byte, c ws.Connection) {
 	loginRes := model.ParsedResult[model.LoginResponse]{}
-	err := json.Unmarshal(data, &loginRes)
-	s.sendIfErr(err)
+	if err := json.Unmarshal(data, &loginRes); err != nil {
+		s.sendIfErr(err)
+		return
+	}
 	s.token = loginRes.ResultData.Token
 	s.processed = make(chan any) // recreate the channel to signal when we are done.
 	s.sendDeviceListRequest(c)

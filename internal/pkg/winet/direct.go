@@ -4,81 +4,89 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gosimple/slug"
 
+	"github.com/anicoll/winet-integration/internal/pkg/contxt"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
+	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 )
 
 func (s *service) handleDirectMessage(data []byte) {
 	s.logger.Debug("handleDirectMessage")
 	res := model.ParsedResult[model.GenericReponse[model.DirectUnit]]{}
-	err := json.Unmarshal(data, &res)
-	s.sendIfErr(err)
-	if s.currentDevice == nil {
+	if err := json.Unmarshal(data, &res); err != nil {
+		s.sendIfErr(err)
+		return
+	}
+	s.deviceMu.RLock()
+	currentDevice := s.currentDevice
+	s.deviceMu.RUnlock()
+	if currentDevice == nil {
 		return
 	}
 
 	datapointsToPublish := make(map[model.Device][]model.DeviceStatus)
 	datapoints := []model.DeviceStatus{}
-	// mpptTotalW := float32(0)
-	for _, data := range res.ResultData.List {
-		nameV := data.Name + " Voltage"
-		nameA := data.Name + " Current"
-		nameW := data.Name + " Power"
+	for _, unit := range res.ResultData.List {
+		nameV := unit.Name + " Voltage"
+		nameA := unit.Name + " Current"
+		nameW := unit.Name + " Power"
 
-		var valueV *string = nil
-		if data.Voltage != "--" {
-			valueV = &data.Voltage
+		var valueV *string
+		if unit.Voltage != "--" {
+			valueV = &unit.Voltage
 		}
-
-		dataPointV := model.DeviceStatus{
+		datapoints = append(datapoints, model.DeviceStatus{
 			Name:  nameV,
 			Slug:  strings.Replace(slug.Make(nameV), "-", "_", -1),
 			Value: valueV,
-			Unit:  string(data.VoltageUnit),
+			Unit:  string(unit.VoltageUnit),
 			Dirty: true,
-		}
-		datapoints = append(datapoints, dataPointV)
+		})
 
-		var valueA *string = nil
-		if data.Current != "--" {
-			valueA = &data.Current
+		var valueA *string
+		if unit.Current != "--" {
+			valueA = &unit.Current
 		}
-
-		dataPointA := model.DeviceStatus{
+		datapoints = append(datapoints, model.DeviceStatus{
 			Name:  nameA,
 			Slug:  strings.Replace(slug.Make(nameA), "-", "_", -1),
 			Value: valueA,
-			Unit:  string(data.CurrentUnit),
+			Unit:  string(unit.CurrentUnit),
 			Dirty: true,
-		}
-		datapoints = append(datapoints, dataPointA)
+		})
 
-		var valueW *string = nil
-		if data.Current != "--" {
-			current, err := strconv.ParseFloat(data.Current, 32)
-			s.sendIfErr(err)
-			voltage, err := strconv.ParseFloat(data.Voltage, 32)
-			s.sendIfErr(err)
-			total := current * voltage * 100
-			total = total / 100
-			valueW = func() *string {
-				s := strconv.FormatFloat(total, 'f', 10, 64)
-				return &s
-			}()
+		// Compute power (W) only when both voltage and current are valid.
+		var valueW *string
+		if unit.Current != "--" && unit.Voltage != "--" {
+			current, err := strconv.ParseFloat(unit.Current, 64)
+			if err != nil {
+				s.sendIfErr(err)
+				return
+			}
+			voltage, err := strconv.ParseFloat(unit.Voltage, 64)
+			if err != nil {
+				s.sendIfErr(err)
+				return
+			}
+			w := strconv.FormatFloat(current*voltage, 'f', 4, 64)
+			valueW = &w
 		}
-
-		dataPointW := model.DeviceStatus{
+		datapoints = append(datapoints, model.DeviceStatus{
 			Name:  nameW,
 			Slug:  strings.Replace(slug.Make(nameW), "-", "_", -1),
 			Value: valueW,
-			Unit:  string(data.CurrentUnit),
+			Unit:  "W", // was incorrectly using CurrentUnit before
 			Dirty: true,
-		}
-		datapoints = append(datapoints, dataPointW)
+		})
 	}
 
-	datapointsToPublish[*s.currentDevice] = datapoints
+	datapointsToPublish[*currentDevice] = datapoints
+	if err := publisher.PublishData(contxt.NewContext(time.Second*5), datapointsToPublish); err != nil {
+		s.sendIfErr(err)
+		// still signal processed so waiter unblocks — the publish error is non-fatal
+	}
 	s.processed <- struct{}{} // indicate we are done.
 }

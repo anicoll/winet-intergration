@@ -28,7 +28,7 @@ type WinetService interface {
 	SendInverterStateChangeCommand(disable bool) (bool, error)
 }
 
-type database interface {
+type Database interface {
 	GetLatestProperties(ctx context.Context) (iter.Seq[models.Property], error)
 	GetProperties(ctx context.Context, identifier, slug string, from, to *time.Time) ([]models.Property, error)
 	GetAmberPrices(ctx context.Context, from, to time.Time, site *string) ([]models.Amberprice, error)
@@ -36,7 +36,7 @@ type database interface {
 
 type server struct {
 	winets WinetService
-	db     database
+	db     Database
 	logger *zap.Logger
 	loc    *time.Location
 }
@@ -47,7 +47,7 @@ func (s *server) OptionsBatteryState(w http.ResponseWriter, r *http.Request, sta
 	w.WriteHeader(http.StatusOK)
 }
 
-func New(ws WinetService, db database) *server {
+func New(ws WinetService, db Database) *server {
 	return &server{
 		winets: ws,
 		logger: zap.L(),

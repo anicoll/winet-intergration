@@ -10,12 +10,14 @@ import (
 
 func (s *service) handleConnectMessage(data []byte, c ws.Connection) {
 	res := model.ParsedResult[model.ConnectResponse]{}
-	err := json.Unmarshal(data, &res)
-	s.sendIfErr(err)
+	if err := json.Unmarshal(data, &res); err != nil {
+		s.sendIfErr(err)
+		return
+	}
 	s.token = res.ResultData.Token
 
 	// login now
-	data, err = json.Marshal(model.LoginRequest{
+	loginData, err := json.Marshal(model.LoginRequest{
 		Request: model.Request{
 			Lang:    EnglishLang,
 			Service: model.Login.String(),
@@ -24,11 +26,14 @@ func (s *service) handleConnectMessage(data []byte, c ws.Connection) {
 		Password: s.cfg.Password,
 		Username: s.cfg.Username,
 	})
-	s.sendIfErr(err)
+	if err != nil {
+		s.sendIfErr(err)
+		return
+	}
 
-	err = c.Send(ws.Msg{
-		Body: data,
-	})
-	s.sendIfErr(err)
-	s.logger.Debug("sent msg", zap.String("query_stage", model.Login.String()), zap.Error(err))
+	if err = c.Send(ws.Msg{Body: loginData}); err != nil {
+		s.sendIfErr(err)
+		return
+	}
+	s.logger.Debug("sent msg", zap.String("query_stage", model.Login.String()))
 }
