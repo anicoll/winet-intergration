@@ -1,3 +1,4 @@
+.PHONY: generate-api
 generate-api:
 	mkdir -p ./pkg/server
 	mkdir -p ./pkg/amber

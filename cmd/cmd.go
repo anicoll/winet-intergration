@@ -13,7 +13,6 @@ import (
 
 	paho_mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/golang-migrate/migrate/v4"
-	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/robfig/cron/v3"
 	"github.com/urfave/cli/v2"
@@ -391,10 +390,7 @@ func startDecisionService(ctx context.Context, winetSvc server.WinetService, db 
 func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db *database.Database, logger *zap.Logger) error {
 	logger.Info("Starting HTTP server", zap.String("addr", serverAddr))
 
-	r := mux.NewRouter()
-	r.Use(mux.CORSMethodMiddleware(r))
-	apiHandler := api.HandlerWithOptions(server.New(winetSvc, db), api.GorillaServerOptions{
-		BaseRouter:  r,
+	apiHandler := api.HandlerWithOptions(server.New(winetSvc, db), api.StdHTTPServerOptions{
 		Middlewares: []api.MiddlewareFunc{server.TimeoutMiddleware, server.LoggingMiddleware},
 		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			logger.Error("HTTP handler error", zap.Error(err))

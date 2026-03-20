@@ -3,5 +3,5 @@ package: api
 output: ./pkg/server/api.gen.go
 generate:
   models: true
-  gorilla-server: true
+  std-http-server: true
   embedded-spec: true
