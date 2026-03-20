@@ -358,30 +358,54 @@ instance and verify all query functions against actual schema migrations.
 
 ---
 
-### Step 5 — Replace global publisher with dependency injection
+### Step 5 — Replace global publisher with dependency injection ✅ DONE
 
 **Goal:** Remove the global registry; make the publishing pipeline testable.
 
-Currently `publisher.RegisterPublisher` and `publisher.PublishData` use package-level
-globals. This makes unit testing impossible without registering real publishers.
+Changes made:
 
-Changes:
-
-- Define a `Publisher` interface:
+- **`DataPoint` struct** — typed replacement for `map[string]any` passed between
+  normalizer → backend publishers.
+- **`Publisher` interface** (backends: MQTT, database):
   ```go
   type Publisher interface {
-      RegisterDevice(ctx context.Context, device *model.Device) error
       Write(ctx context.Context, data []DataPoint) error
+      RegisterDevice(ctx context.Context, device *model.Device) error
   }
   ```
-- Create a `MultiPublisher` that fans out to a slice of `Publisher` implementations.
-- Inject `MultiPublisher` into the winet service and the poller, eliminating all
-  package-level state.
-- Move the slug-ignore list and unit normalization logic into a `Normalizer` type so it
-  can be tested independently.
+- **`DataPublisher` interface** (injected into the winet service):
+  ```go
+  type DataPublisher interface {
+      PublishData(ctx context.Context, devices map[model.Device][]model.DeviceStatus) error
+      RegisterDevice(ctx context.Context, device *model.Device) error
+  }
+  ```
+- **`Normalizer` type** (`publisher/normalizer.go`) — converts a raw `DeviceStatus` into
+  a `DataPoint`: applies unit conversions (kWp→kW, ℃→°C, kvar→var×1000, kVA→VA×1000),
+  nil/`"--"` → `"0.00"` for numeric sensors, filters ignored slugs.
+- **`MultiPublisher`** — implements `DataPublisher`; normalizes, deduplicates (instance-
+  scoped `sync.Map` keyed by `identifier_slug`), then fans out `[]DataPoint` to all
+  registered `Publisher` backends. Backend errors are logged but do not fail the call.
+- All package-level globals (`registerdPublishers`, `sensors`, `publishersMu`) and global
+  functions (`RegisterPublisher`, `PublishData`, `RegisterDevice`) removed.
+- `winet.New()` updated to accept `publisher.DataPublisher` as a required parameter.
+- `poller.go`, `real.go`, `direct.go` now call `s.publisher.RegisterDevice` /
+  `s.publisher.PublishData` instead of package-level functions.
+- `mqtt/write.go` and `database/write.go` updated: `Write` takes `[]publisher.DataPoint`.
+- `cmd.go` wires everything: `publisher.NewMultiPublisher(db, mqttPublisher)` is created
+  and passed to `winet.New()`.
+- `.mockery.yaml` — added `DataPublisher` interface; `make generate-mocks` now deletes
+  all `mocks/**/*.go` before regenerating to prevent stale mocks from accumulating.
 
-**Testing:** Unit test the normalizer with table-driven tests. Test `MultiPublisher`
-fan-out with mock publishers.
+**Testing:**
+
+- `publisher/publisher_test.go` — table-driven `Normalizer` tests (all unit conversions,
+  ignored slugs, nil/dash values, text sensors, dot-stripping in identifier); `MultiPublisher`
+  tests for fan-out, dedup, error isolation, `RegisterDevice` fan-out. Uses a local
+  `stubPublisher` to avoid a mock import cycle.
+- `winet/winet_test.go` — three new tests verify that `queryDevices` calls
+  `RegisterDevice`, and that `handleRealMessage` / `handleDirectMessage` each call
+  `PublishData`, using the generated `DataPublisher` mock.
 
 ---
 
@@ -561,8 +585,8 @@ Step 1  Fix websocket bugs          ✅ merged to main
 Step 10 Testing (unit, mockery)     ✅ merged to main (partial — unit tests done)
 Step 2  Fix transport + config types ✅ merged to main
 Step 3  Restructure winet service   ✅ merged to main
-Step 4  sqlc migration               ─┐  ← next up (feature/refactor branch)
-Step 5  DI publisher                  ├─ feature/refactor branch
+Step 4  sqlc migration               ─┐  ✅ done (feature/refactor branch)
+Step 5  DI publisher                  ├─ ✅ done (feature/refactor branch)
 Step 6  stdlib HTTP                   │
 Step 7  Config/CLI removal           ─┘ → merge to main
 Step 8  Reconnect backoff           → main
