@@ -590,11 +590,11 @@ since they touch the same files. Steps 8–10 build on top.
 Step 1  Fix websocket bugs          ✅ merged to main
 Step 10 Testing (unit, mockery)     ✅ merged to main (partial — unit tests done)
 Step 2  Fix transport + config types ✅ merged to main
-Step 3  Restructure winet service   ─┐  ← next up
-Step 4  sqlc migration               ├─ feature/refactor branch
-Step 5  DI publisher                 │
-Step 6  stdlib HTTP                  │
-Step 7  Config/CLI removal          ─┘ → merge to main
+Step 3  Restructure winet service   ✅ merged to main
+Step 4  sqlc migration               ─┐  ✅ done (feature/refactor branch)
+Step 5  DI publisher                  ├─ ✅ done (feature/refactor branch)
+Step 6  stdlib HTTP                   │
+Step 7  Config/CLI removal           ─┘ → merge to main
 Step 8  Reconnect backoff           → main
 Step 9  Re-enable services          → main
 Step 10 Testing (integration, DB)   → ongoing, parallel with Steps 3–9
