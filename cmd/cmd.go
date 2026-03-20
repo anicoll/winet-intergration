@@ -120,7 +120,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 
 	// // Setup error channel with buffer
 	errorChan := make(chan error, errorChannelBuffer)
-	winetSvc := winet.New(&cfg.WinetCfg, pub, errorChan)
+	winetSvc := winet.New(cfg.WinetCfg, pub, errorChan)
 
 	// // Start all services
 	eg, ctx := errgroup.WithContext(ctx)

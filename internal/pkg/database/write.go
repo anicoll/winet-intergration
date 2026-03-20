@@ -2,15 +2,15 @@ package database
 
 import (
 	"context"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
 	dbq "github.com/anicoll/winet-integration/internal/pkg/database/db"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
+	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 )
 
-func (d *Database) Write(ctx context.Context, data []map[string]any) error {
+func (d *Database) Write(ctx context.Context, data []publisher.DataPoint) error {
 	tx, err := d.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -18,13 +18,13 @@ func (d *Database) Write(ctx context.Context, data []map[string]any) error {
 	defer tx.Rollback(ctx)
 
 	qtx := d.queries.WithTx(tx)
-	for _, record := range data {
+	for _, dp := range data {
 		if _, err := qtx.InsertProperty(ctx, dbq.InsertPropertyParams{
-			TimeStamp:         record["timestamp"].(time.Time),
-			UnitOfMeasurement: record["unit_of_measurement"].(string),
-			Value:             record["value"].(string),
-			Identifier:        record["identifier"].(string),
-			Slug:              record["slug"].(string),
+			TimeStamp:         dp.Timestamp,
+			UnitOfMeasurement: dp.UnitOfMeasurement,
+			Value:             dp.Value,
+			Identifier:        dp.Identifier,
+			Slug:              dp.Slug,
 		}); err != nil {
 			return err
 		}
