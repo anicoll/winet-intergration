@@ -13,6 +13,7 @@ import (
 
 	"github.com/anicoll/winet-integration/internal/pkg/config"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
+	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 	ws "github.com/anicoll/winet-integration/pkg/sockets"
 )
 
@@ -81,14 +82,16 @@ type service struct {
 	deviceMu      sync.RWMutex
 	currentDevice *model.Device
 
+	publisher  publisher.DataPublisher
 	pending    pendingCmd
 	loginReady chan struct{} // closed by handleLoginMessage to start poll loop
 	cancelPoll context.CancelFunc
 }
 
-func New(cfg *config.WinetConfig, errChan chan error) *service {
+func New(cfg *config.WinetConfig, pub publisher.DataPublisher, errChan chan error) *service {
 	return &service{
 		cfg:        cfg,
+		publisher:  pub,
 		errChan:    errChan,
 		logger:     zap.L(),
 		storedData: []byte{},

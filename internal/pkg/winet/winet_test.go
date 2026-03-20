@@ -13,13 +13,25 @@ import (
 
 	"github.com/anicoll/winet-integration/internal/pkg/config"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
+	publishermocks "github.com/anicoll/winet-integration/mocks/publisher"
 	socketsmocks "github.com/anicoll/winet-integration/mocks/sockets"
 	ws "github.com/anicoll/winet-integration/pkg/sockets"
 )
 
+// noopPublisher satisfies publisher.DataPublisher without doing anything.
+type noopPublisher struct{}
+
+func (noopPublisher) PublishData(_ context.Context, _ map[model.Device][]model.DeviceStatus) error {
+	return nil
+}
+
+func (noopPublisher) RegisterDevice(_ context.Context, _ *model.Device) error {
+	return nil
+}
+
 // newTestService creates a service with a background context and large errChan buffer.
 func newTestService() *service {
-	svc := New(&config.WinetConfig{Username: "user", Password: "pass"}, make(chan error, 32))
+	svc := New(&config.WinetConfig{Username: "user", Password: "pass"}, noopPublisher{}, make(chan error, 32))
 	svc.ctx = context.Background()
 	svc.properties = map[string]string{} // bypass HTTP fetch in getProperties
 	svc.loginReady = make(chan struct{})  // pre-init so handlers don't panic
@@ -29,12 +41,12 @@ func newTestService() *service {
 // --- Initialisation ---
 
 func TestNew_InitializesChannels(t *testing.T) {
-	svc := New(&config.WinetConfig{}, make(chan error, 10))
+	svc := New(&config.WinetConfig{}, noopPublisher{}, make(chan error, 10))
 	assert.NotNil(t, svc.events, "events must be non-nil after New()")
 }
 
 func TestEvents_ReturnsSameChannel(t *testing.T) {
-	svc := New(&config.WinetConfig{}, make(chan error, 10))
+	svc := New(&config.WinetConfig{}, noopPublisher{}, make(chan error, 10))
 	ch1 := svc.Events()
 	ch2 := svc.Events()
 	assert.Equal(t, ch1, ch2, "Events() must always return the same channel")
@@ -171,7 +183,7 @@ func TestHandleLoginMessage_ClosesLoginReady(t *testing.T) {
 // safely to the Events() channel without panicking.
 func TestOnMessage_LoginTimeout_RoutesToEventsChan(t *testing.T) {
 	errChan := make(chan error, 32)
-	svc := New(&config.WinetConfig{Host: "127.0.0.1"}, errChan)
+	svc := New(&config.WinetConfig{Host: "127.0.0.1"}, noopPublisher{}, errChan)
 	svc.ctx = context.Background()
 	svc.properties = map[string]string{}
 	svc.loginReady = make(chan struct{})
@@ -571,4 +583,99 @@ func TestQueryDevices_SendsOneRequestPerStage(t *testing.T) {
 	svc.deviceMu.RUnlock()
 	require.NotNil(t, cd)
 	assert.Equal(t, "SN001", cd.SerialNumber)
+}
+
+// --- publisher integration ---
+
+func TestQueryDevices_CallsRegisterDeviceOnPublisher(t *testing.T) {
+	pub := publishermocks.NewDataPublisher(t)
+	svc := New(&config.WinetConfig{}, pub, make(chan error, 32))
+	svc.ctx = context.Background()
+	svc.properties = map[string]string{}
+	svc.loginReady = make(chan struct{})
+
+	conn := socketsmocks.NewConnection(t)
+	svc.conn = conn
+	conn.Mock.On("Send", mock.Anything).Return(nil).Run(func(_ mock.Arguments) {
+		time.AfterFunc(2*time.Millisecond, func() { svc.pending.deliver(struct{}{}) })
+	})
+
+	pub.EXPECT().RegisterDevice(mock.Anything, mock.MatchedBy(func(d *model.Device) bool {
+		return d.SerialNumber == "SN001"
+	})).Return(nil)
+
+	svc.queryDevices(context.Background(), []model.DeviceListObject{
+		{DeviceID: 1, DevModel: "XH3000", DevSN: "SN001", DevType: model.DeviceTypeInverter},
+	})
+}
+
+func TestHandleRealMessage_CallsPublishData(t *testing.T) {
+	pub := publishermocks.NewDataPublisher(t)
+	svc := New(&config.WinetConfig{}, pub, make(chan error, 32))
+	svc.ctx = context.Background()
+	svc.properties = map[string]string{}
+	svc.loginReady = make(chan struct{})
+	svc.deviceMu.Lock()
+	svc.currentDevice = &model.Device{ID: "1", Model: "XH3000", SerialNumber: "SN001"}
+	svc.deviceMu.Unlock()
+
+	body, err := json.Marshal(model.ParsedResult[model.GenericReponse[model.GenericUnit]]{
+		ResultCode: 1, ResultMessage: "success",
+		ResultData: model.GenericReponse[model.GenericUnit]{
+			Count: 1, Service: model.Real.String(),
+			List: []model.GenericUnit{
+				{DataName: "battery_power", DataValue: "5.0", DataUnit: model.NumericUnitKiloWatt},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	pub.EXPECT().PublishData(mock.Anything, mock.MatchedBy(func(m map[model.Device][]model.DeviceStatus) bool {
+		return len(m) == 1
+	})).Return(nil)
+
+	received := startWaiting(svc)
+	svc.handleRealMessage(body)
+
+	select {
+	case <-received:
+	case <-time.After(time.Second):
+		t.Fatal("pending not delivered within 1s")
+	}
+}
+
+func TestHandleDirectMessage_CallsPublishData(t *testing.T) {
+	pub := publishermocks.NewDataPublisher(t)
+	svc := New(&config.WinetConfig{}, pub, make(chan error, 32))
+	svc.ctx = context.Background()
+	svc.properties = map[string]string{}
+	svc.loginReady = make(chan struct{})
+	svc.deviceMu.Lock()
+	svc.currentDevice = &model.Device{ID: "1", Model: "XH3000", SerialNumber: "SN001"}
+	svc.deviceMu.Unlock()
+
+	v, c := "12.5", "1.5"
+	body, err := json.Marshal(model.ParsedResult[model.GenericReponse[model.DirectUnit]]{
+		ResultCode: 1, ResultMessage: "success",
+		ResultData: model.GenericReponse[model.DirectUnit]{
+			Count: 1, Service: model.Direct.String(),
+			List: []model.DirectUnit{
+				{Name: "PV1", Voltage: v, VoltageUnit: model.NumericUnitVolt, Current: c, CurrentUnit: model.NumericUnitAmp},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	pub.EXPECT().PublishData(mock.Anything, mock.MatchedBy(func(m map[model.Device][]model.DeviceStatus) bool {
+		return len(m) == 1
+	})).Return(nil)
+
+	received := startWaiting(svc)
+	svc.handleDirectMessage(body)
+
+	select {
+	case <-received:
+	case <-time.After(time.Second):
+		t.Fatal("pending not delivered within 1s")
+	}
 }

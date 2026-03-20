@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/anicoll/winet-integration/internal/pkg/model"
-	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 	ws "github.com/anicoll/winet-integration/pkg/sockets"
 )
 
@@ -78,7 +77,7 @@ func (s *service) queryDevices(ctx context.Context, devices []model.DeviceListOb
 		s.currentDevice = dev
 		s.deviceMu.Unlock()
 
-		if err := publisher.RegisterDevice(dev); err != nil {
+		if err := s.publisher.RegisterDevice(ctx, dev); err != nil {
 			s.sendIfErr(err)
 		}
 

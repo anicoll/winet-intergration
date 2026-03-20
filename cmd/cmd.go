@@ -117,18 +117,12 @@ func run(ctx context.Context, cfg *config.Config) error {
 	if err := mqttPublisher.Connect(); err != nil {
 		return fmt.Errorf("failed to connect to MQTT broker: %w", err)
 	}
-	// Register publishers
-	if err := publisher.RegisterPublisher("postgres", db); err != nil {
-		return fmt.Errorf("failed to register postgres publisher: %w", err)
-	}
-	// Register publishers
-	if err := publisher.RegisterPublisher("mqtt", mqttPublisher); err != nil {
-		return fmt.Errorf("failed to register mqtt publisher: %w", err)
-	}
+
+	pub := publisher.NewMultiPublisher(db, mqttPublisher)
 
 	// // Setup error channel with buffer
 	errorChan := make(chan error, errorChannelBuffer)
-	winetSvc := winet.New(cfg.WinetCfg, errorChan)
+	winetSvc := winet.New(cfg.WinetCfg, pub, errorChan)
 
 	// // Start all services
 	eg, ctx := errgroup.WithContext(ctx)

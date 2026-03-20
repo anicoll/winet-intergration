@@ -13,7 +13,7 @@ packages:
     config:
       dir: "mocks/publisher"
     interfaces:
-      Publisher:
+      DataPublisher:
   github.com/anicoll/winet-integration/internal/pkg/logic:
     config:
       dir: "mocks/logic"
