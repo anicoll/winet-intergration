@@ -53,7 +53,7 @@ func (s *service) SendSelfConsumptionCommand() (bool, error) {
 	if err = s.conn.Send(ws.Msg{Body: data}); err != nil {
 		return false, err
 	}
-	res, err := s.waiter()
+	res, err := s.pending.wait(s.ctx)
 	if err != nil {
 		return false, err
 	}
@@ -118,7 +118,7 @@ func (s *service) SendDischargeCommand(dischargePower string) (bool, error) {
 	if err = s.conn.Send(ws.Msg{Body: data}); err != nil {
 		return false, err
 	}
-	res, err := s.waiter()
+	res, err := s.pending.wait(s.ctx)
 	if err != nil {
 		return false, err
 	}
@@ -183,7 +183,7 @@ func (s *service) SendChargeCommand(chargePower string) (bool, error) {
 	if err = s.conn.Send(ws.Msg{Body: data}); err != nil {
 		return false, err
 	}
-	res, err := s.waiter()
+	res, err := s.pending.wait(s.ctx)
 	if err != nil {
 		return false, err
 	}
@@ -240,7 +240,7 @@ func (s *service) SendBatteryStopCommand() (bool, error) {
 	if err = s.conn.Send(ws.Msg{Body: data}); err != nil {
 		return false, err
 	}
-	res, err := s.waiter()
+	res, err := s.pending.wait(s.ctx)
 	if err != nil {
 		return false, err
 	}
@@ -286,7 +286,7 @@ func (s *service) SendInverterStateChangeCommand(disable bool) (bool, error) {
 	if err = s.conn.Send(ws.Msg{Body: data}); err != nil {
 		return false, err
 	}
-	res, err := s.waiter()
+	res, err := s.pending.wait(s.ctx)
 	if err != nil {
 		return false, err
 	}
@@ -354,7 +354,7 @@ func (s *service) SetFeedInLimitation(feedinLimited bool) (bool, error) {
 	if err = s.conn.Send(ws.Msg{Body: data}); err != nil {
 		return false, err
 	}
-	res, err := s.waiter()
+	res, err := s.pending.wait(s.ctx)
 	if err != nil {
 		return false, err
 	}
@@ -374,5 +374,5 @@ func (s *service) handleParamMessage(data []byte, _ ws.Connection) {
 	}
 	s.logger.Info("param_message", zap.Any("payload", res))
 
-	s.processed <- res
+	s.pending.deliver(res)
 }

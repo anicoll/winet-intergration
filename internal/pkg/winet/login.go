@@ -29,14 +29,14 @@ func (s *service) sendDeviceListRequest(c ws.Connection) {
 	s.logger.Debug("sent msg", zap.String("query_stage", model.DeviceList.String()))
 }
 
-// handleLoginMessage consumes Login response and calls DeviceList.
-func (s *service) handleLoginMessage(data []byte, c ws.Connection) {
+// handleLoginMessage saves the session token and signals the poll loop that
+// login is complete. The poll loop sends the first device list request.
+func (s *service) handleLoginMessage(data []byte, _ ws.Connection) {
 	loginRes := model.ParsedResult[model.LoginResponse]{}
 	if err := json.Unmarshal(data, &loginRes); err != nil {
 		s.sendIfErr(err)
 		return
 	}
 	s.token = loginRes.ResultData.Token
-	s.processed = make(chan any) // recreate the channel to signal when we are done.
-	s.sendDeviceListRequest(c)
+	close(s.loginReady) // unblock runPollLoop
 }

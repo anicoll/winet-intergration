@@ -310,7 +310,7 @@ func fetchAndStorePrices(ctx context.Context, svc interface {
 
 type winetSvc interface {
 	Connect(ctx context.Context) error
-	SubscribeToTimeout() <-chan error
+	Events() <-chan winet.SessionEvent
 }
 
 func startWinetService(ctx context.Context, winetSvc winetSvc, errChan chan error, logger *zap.Logger) error {
@@ -333,15 +333,15 @@ func startWinetService(ctx context.Context, winetSvc winetSvc, errChan chan erro
 
 		logger.Info("Winet service connected successfully")
 
-		// Wait for timeout or context cancellation
+		// Wait for a session event or context cancellation
 		select {
-		case err := <-winetSvc.SubscribeToTimeout():
-			if errors.Is(err, winet.ErrTimeout) {
-				logger.Warn("winet timeout occurred, reconnecting", zap.Error(err))
+		case event := <-winetSvc.Events():
+			if errors.Is(event.Err, winet.ErrTimeout) {
+				logger.Warn("winet timeout occurred, reconnecting", zap.Error(event.Err))
 				continue
 			}
-			logger.Error("winet service error", zap.Error(err))
-			return err
+			logger.Error("winet service error", zap.Error(event.Err))
+			return event.Err
 		case <-ctx.Done():
 			logger.Info("Winet service stopped")
 			return ctx.Err()
