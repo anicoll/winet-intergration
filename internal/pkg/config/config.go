@@ -1,42 +1,30 @@
 package config
 
 import (
-	"errors"
 	"time"
-)
 
 	"github.com/caarlos0/env/v11"
 )
 
 // Config holds all application configuration populated from environment variables.
 type Config struct {
-	WinetCfg         *WinetConfig
-	MqttCfg          *MQTTConfig
-	AmberCfg         *AmberConfig
-	LogLevel         string
-	DBDSN            string
-	MigrationsFolder string
-	Timezone         string
+	WinetCfg         WinetConfig
+	MqttCfg          MQTTConfig
+	AmberCfg         AmberConfig
+	LogLevel         string `env:"LOG_LEVEL"          envDefault:"info"`
+	DBDSN            string `env:"DATABASE_URL,required"`
+	MigrationsFolder string `env:"MIGRATIONS_FOLDER"  envDefault:"migrations"`
+	Timezone         string `env:"TIMEZONE"           envDefault:"Australia/Adelaide"`
 }
 
-// Validate checks that all required fields are present.
-func (c *Config) Validate() error {
-	if c.WinetCfg == nil {
-		return errors.New("winet config is required")
+// Load parses configuration from environment variables.
+// Returns an error if any required variable is missing or malformed.
+func Load() (*Config, error) {
+	cfg := &Config{}
+	if err := env.Parse(cfg); err != nil {
+		return nil, err
 	}
-	if c.WinetCfg.Host == "" {
-		return errors.New("winet host is required")
-	}
-	if c.WinetCfg.Username == "" {
-		return errors.New("winet username is required")
-	}
-	if c.WinetCfg.Password == "" {
-		return errors.New("winet password is required")
-	}
-	if c.DBDSN == "" {
-		return errors.New("database DSN is required")
-	}
-	return nil
+	return cfg, nil
 }
 
 type WinetConfig struct {
@@ -56,15 +44,4 @@ type MQTTConfig struct {
 type AmberConfig struct {
 	Host  string `env:"AMBER_HOST"`
 	Token string `env:"AMBER_TOKEN"`
-}
-
-type MQTTConfig struct {
-	Host     string
-	Username string
-	Password string
-}
-
-type AmberConfig struct {
-	Host  string
-	Token string
 }

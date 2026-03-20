@@ -15,7 +15,6 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/robfig/cron/v3"
-	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
@@ -51,41 +50,8 @@ const (
 	priceUpdateDelay = 5 * time.Second
 )
 
-// WinetCommand is the main entry point for the winet integration CLI command.
-// It validates configuration and starts all required services.
-func WinetCommand(ctx *cli.Context) error {
-	cfg := &config.Config{
-		WinetCfg: &config.WinetConfig{
-			Password:     ctx.String("winet-password"),
-			Username:     ctx.String("winet-username"),
-			Host:         ctx.String("winet-host"),
-			Ssl:          ctx.Bool("winet-ssl"),
-			PollInterval: ctx.Duration("poll-interval"),
-		},
-		DBDSN:            ctx.String("database-url"),
-		MigrationsFolder: ctx.String("migrations-folder"),
-		MqttCfg: &config.MQTTConfig{
-			Host:     ctx.String("mqtt-host"),
-			Username: ctx.String("mqtt-user"),
-			Password: ctx.String("mqtt-pass"),
-		},
-		AmberCfg: &config.AmberConfig{
-			Host:  ctx.String("amber-host"),
-			Token: ctx.String("amber-token"),
-		},
-		Timezone: ctx.String("timezone"),
-		LogLevel: ctx.String("log-level"),
-	}
-
-	if err := cfg.Validate(); err != nil {
-		return fmt.Errorf("configuration validation failed: %w", err)
-	}
-
-	return run(ctx.Context, cfg)
-}
-
-// run orchestrates all services and handles graceful shutdown.
-func run(ctx context.Context, cfg *config.Config) error {
+// Run orchestrates all services and handles graceful shutdown.
+func Run(ctx context.Context, cfg *config.Config) error {
 	// Setup graceful shutdown
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -120,7 +86,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 
 	// // Setup error channel with buffer
 	errorChan := make(chan error, errorChannelBuffer)
-	winetSvc := winet.New(cfg.WinetCfg, pub, errorChan)
+	winetSvc := winet.New(&cfg.WinetCfg, pub, errorChan)
 
 	// // Start all services
 	eg, ctx := errgroup.WithContext(ctx)
@@ -132,7 +98,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 
 	// Start amber price processing service
 	eg.Go(func() error {
-		return startAmberPriceService(ctx, cfg.AmberCfg, db, errorChan, logger)
+		return startAmberPriceService(ctx, &cfg.AmberCfg, db, errorChan, logger)
 	})
 
 	// Start winet service with retry logic
