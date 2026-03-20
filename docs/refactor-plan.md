@@ -480,25 +480,30 @@ required-field missing cases, and a custom-values case. Coverage: 100%.
 
 ---
 
-### Step 8 — Reconnect and session management (follow-up to Step 3)
+### Step 8 — Reconnect and session management (follow-up to Step 3) ✅ DONE
 
 **Goal:** Robust, observable reconnect behaviour.
 
-The current retry loop in `startWinetService` has a fixed 5-second sleep with no
-backoff. On repeated failures (e.g., inverter rebooting) this hammers the device.
+Changes made (all in `cmd/cmd.go`):
 
-Changes:
-
-- Implement exponential backoff with jitter using the standard pattern:
-  ```go
-  backoff := min(baseDelay * (1 << attempt), maxDelay)
-  sleep(backoff + jitter())
+- **`reconnectBackoff(attempt int) time.Duration`** — exponential backoff with ±20%
+  jitter: `min(base×2^min(attempt,6), 5m) ± 20%`. Base is 5 s; cap is 5 min.
+  Uses `math/rand/v2.Int64N` for the jitter.
+- **`healthState`** — `sync/atomic.Value`-backed type with `set(string)` / `get() string`
+  methods, safe for concurrent reads from the HTTP handler and writes from the winet loop.
+- **`startWinetService`** — signature changed to accept `*healthState` instead of
+  `chan error` (error channel was unused). Tracks `consecutiveFails`; on each failure
+  logs attempt number and backoff duration, sleeps the backoff, and returns a fatal error
+  after `maxConnAttempts = 10` consecutive failures. Sets health to `"reconnecting"` on
+  each attempt, `"connected"` on success, `"disconnected"` on context cancellation or
+  fatal exit.
+- **`startHTTPServer`** — accepts `*healthState`; wraps the generated API handler in a
+  new `http.NewServeMux()` that also handles `GET /health`:
   ```
-- Expose a `HealthStatus` (connected/disconnected/reconnecting) via the HTTP server
-  at `GET /health`.
-- Log each reconnect attempt with the backoff duration and attempt count.
-- After `maxAttempts` consecutive failures, surface a fatal error to the errgroup so
-  the process exits with a non-zero code and can be restarted by the container runtime.
+  {"status":"connected"}  // or "reconnecting" / "disconnected" / "starting"
+  ```
+- **`Run()`** — creates `healthState`, passes it to `startWinetService` and
+  `startHTTPServer`.
 
 ---
 
@@ -595,7 +600,7 @@ Step 4  sqlc migration               ─┐  ✅ done (feature/refactor branch)
 Step 5  DI publisher                  ├─ ✅ done (feature/refactor branch)
 Step 6  stdlib HTTP                   ├─ ✅ done (feature/refactor branch)
 Step 7  Config/CLI removal           ─┘  ✅ done (feature/refactor branch) → merge to main
-Step 8  Reconnect backoff           → main
+Step 8  Reconnect backoff           ✅ done (feature/refactor branch) → main
 Step 9  Re-enable services          → main
 Step 10 Testing (integration, DB)   → ongoing, parallel with Steps 3–9
 ```

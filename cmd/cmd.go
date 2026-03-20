@@ -5,9 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -48,7 +50,33 @@ const (
 
 	// Delays
 	priceUpdateDelay = 5 * time.Second
+
+	// Reconnect backoff
+	backoffBase     = 5 * time.Second
+	backoffMax      = 5 * time.Minute
+	maxConnAttempts = 10
 )
+
+// healthState holds the current winet connection status, safe for concurrent access.
+type healthState struct {
+	status atomic.Value // stores string
+}
+
+func (h *healthState) set(s string) { h.status.Store(s) }
+func (h *healthState) get() string {
+	if v := h.status.Load(); v != nil {
+		return v.(string)
+	}
+	return "starting"
+}
+
+// reconnectBackoff returns the wait duration for the given attempt (0-indexed)
+// using exponential backoff (base×2^attempt, capped at backoffMax) plus ±20% jitter.
+func reconnectBackoff(attempt int) time.Duration {
+	d := min(backoffBase*(1<<min(attempt, 6)), backoffMax)
+	jitter := time.Duration(rand.Int64N(int64(d/5)*2)) - d/5
+	return d + jitter
+}
 
 // Run orchestrates all services and handles graceful shutdown.
 func Run(ctx context.Context, cfg *config.Config) error {
@@ -84,11 +112,12 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	pub := publisher.NewMultiPublisher(db, mqttPublisher)
 
-	// // Setup error channel with buffer
 	errorChan := make(chan error, errorChannelBuffer)
 	winetSvc := winet.New(&cfg.WinetCfg, pub, errorChan)
 
-	// // Start all services
+	health := &healthState{}
+	health.set("starting")
+
 	eg, ctx := errgroup.WithContext(ctx)
 
 	// // Start database cleanup service
@@ -103,7 +132,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	// Start winet service with retry logic
 	eg.Go(func() error {
-		return startWinetService(ctx, winetSvc, errorChan, logger)
+		return startWinetService(ctx, winetSvc, health, logger)
 	})
 	// Start decision logic service.
 	// eg.Go(func() error {
@@ -117,7 +146,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	// Start HTTP server
 	eg.Go(func() error {
-		return startHTTPServer(ctx, winetSvc, db, logger)
+		return startHTTPServer(ctx, winetSvc, db, health, logger)
 	})
 
 	// Start error handler
@@ -265,24 +294,43 @@ type winetSvc interface {
 	Events() <-chan winet.SessionEvent
 }
 
-func startWinetService(ctx context.Context, winetSvc winetSvc, errChan chan error, logger *zap.Logger) error {
+func startWinetService(ctx context.Context, winetSvc winetSvc, health *healthState, logger *zap.Logger) error {
 	logger.Info("Starting winet service")
+	consecutiveFails := 0
 
 	for {
 		select {
 		case <-ctx.Done():
+			health.set("disconnected")
 			logger.Info("Winet service stopped")
 			return ctx.Err()
 		default:
 		}
 
+		health.set("reconnecting")
 		if err := winetSvc.Connect(ctx); err != nil {
-			logger.Error("winet connection failed", zap.Error(err))
-			// Add exponential backoff here if needed
-			time.Sleep(5 * time.Second)
+			consecutiveFails++
+			backoff := reconnectBackoff(consecutiveFails - 1)
+			logger.Error("winet connection failed",
+				zap.Error(err),
+				zap.Int("attempt", consecutiveFails),
+				zap.Duration("backoff", backoff),
+			)
+			if consecutiveFails >= maxConnAttempts {
+				health.set("disconnected")
+				return fmt.Errorf("winet: exceeded %d consecutive connection failures: %w", maxConnAttempts, err)
+			}
+			select {
+			case <-ctx.Done():
+				health.set("disconnected")
+				return ctx.Err()
+			case <-time.After(backoff):
+			}
 			continue
 		}
 
+		consecutiveFails = 0
+		health.set("connected")
 		logger.Info("Winet service connected successfully")
 
 		// Wait for a session event or context cancellation
@@ -295,6 +343,7 @@ func startWinetService(ctx context.Context, winetSvc winetSvc, errChan chan erro
 			logger.Error("winet service error", zap.Error(event.Err))
 			return event.Err
 		case <-ctx.Done():
+			health.set("disconnected")
 			logger.Info("Winet service stopped")
 			return ctx.Err()
 		}
@@ -352,7 +401,7 @@ func startDecisionService(ctx context.Context, winetSvc server.WinetService, db 
 	}
 }
 
-func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db *database.Database, logger *zap.Logger) error {
+func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db *database.Database, health *healthState, logger *zap.Logger) error {
 	logger.Info("Starting HTTP server", zap.String("addr", serverAddr))
 
 	apiHandler := api.HandlerWithOptions(server.New(winetSvc, db), api.StdHTTPServerOptions{
@@ -363,8 +412,15 @@ func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db *data
 		},
 	})
 
+	mux := http.NewServeMux()
+	mux.Handle("/", apiHandler)
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"status":%q}`, health.get())
+	})
+
 	srv := &http.Server{
-		Handler:      apiHandler,
+		Handler:      mux,
 		Addr:         serverAddr,
 		WriteTimeout: serverWriteTimeout,
 		ReadTimeout:  serverReadTimeout,
