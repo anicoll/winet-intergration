@@ -1,16 +1,19 @@
 package database
 
 import (
-	"context"
-	"database/sql"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	dbq "github.com/anicoll/winet-integration/internal/pkg/database/db"
 )
 
 type Database struct {
-	db *sql.DB
+	pool    *pgxpool.Pool
+	queries *dbq.Queries
 }
 
-func NewDatabase(ctx context.Context, db *sql.DB) *Database {
+func NewDatabase(pool *pgxpool.Pool) *Database {
 	return &Database{
-		db: db,
+		pool:    pool,
+		queries: dbq.New(pool),
 	}
 }

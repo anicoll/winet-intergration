@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
 	servermocks "github.com/anicoll/winet-integration/mocks/server"
-	"github.com/anicoll/winet-integration/internal/pkg/models"
 	api "github.com/anicoll/winet-integration/pkg/server"
 )
 
@@ -29,8 +29,8 @@ func postJSON(t *testing.T, body any) *http.Request {
 	return r
 }
 
-func propSeq(props []models.Property) iter.Seq[models.Property] {
-	return func(yield func(models.Property) bool) {
+func propSeq(props []dbpkg.Property) iter.Seq[dbpkg.Property] {
+	return func(yield func(dbpkg.Property) bool) {
 		for _, p := range props {
 			if !yield(p) {
 				return
@@ -161,7 +161,7 @@ func TestPostInverterState_On(t *testing.T) {
 // --- GetProperties ---
 
 func TestGetProperties_ReturnsJSON(t *testing.T) {
-	props := []models.Property{
+	props := []dbpkg.Property{
 		{ID: 1, Identifier: "XH3000_SN001", Slug: "battery_power", Value: "5.5", UnitOfMeasurement: "kW"},
 		{ID: 2, Identifier: "XH3000_SN001", Slug: "battery_soc", Value: "80", UnitOfMeasurement: "%"},
 	}
@@ -175,7 +175,7 @@ func TestGetProperties_ReturnsJSON(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
-	var got []models.Property
+	var got []dbpkg.Property
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
 	assert.Len(t, got, 2)
 }

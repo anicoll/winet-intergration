@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anicoll/winet-integration/internal/pkg/models"
+	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
 	ac "github.com/anicoll/winet-integration/pkg/amber"
 	"github.com/anicoll/winet-integration/pkg/utils"
 	"go.uber.org/zap"
@@ -73,7 +73,7 @@ func (c *client) GetSites() []ac.Site {
 	return c.sites
 }
 
-func (c *client) GetPrices(ctx context.Context, siteID string) ([]models.Amberprice, error) {
+func (c *client) GetPrices(ctx context.Context, siteID string) ([]dbpkg.Amberprice, error) {
 	response, err := c.aClient.GetCurrentPricesWithResponse(ctx, siteID, &ac.GetCurrentPricesParams{
 		Next:     utils.ToPtr(1600),
 		Previous: utils.ToPtr(400),
@@ -133,9 +133,9 @@ func (c *client) GetPrices(ctx context.Context, siteID string) ([]models.Amberpr
 		return a.StartTime.Compare(b.StartTime)
 	})
 
-	res := []models.Amberprice{}
+	res := []dbpkg.Amberprice{}
 	for _, interval := range historicalIntervals {
-		res = append(res, models.Amberprice{
+		res = append(res, dbpkg.Amberprice{
 			PerKwh:      float64(interval.PerKwh),
 			SpotPerKwh:  float64(interval.SpotPerKwh),
 			StartTime:   interval.StartTime,
@@ -146,7 +146,7 @@ func (c *client) GetPrices(ctx context.Context, siteID string) ([]models.Amberpr
 		})
 	}
 	for _, interval := range forecastIntervals {
-		res = append(res, models.Amberprice{
+		res = append(res, dbpkg.Amberprice{
 			PerKwh:      float64(interval.PerKwh),
 			SpotPerKwh:  float64(interval.SpotPerKwh),
 			StartTime:   interval.StartTime,
@@ -157,7 +157,7 @@ func (c *client) GetPrices(ctx context.Context, siteID string) ([]models.Amberpr
 		})
 	}
 	for _, interval := range currentIntervals {
-		res = append(res, models.Amberprice{
+		res = append(res, dbpkg.Amberprice{
 			PerKwh:      float64(interval.PerKwh),
 			SpotPerKwh:  float64(interval.SpotPerKwh),
 			StartTime:   interval.StartTime,

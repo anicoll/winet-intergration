@@ -11,7 +11,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/anicoll/winet-integration/internal/pkg/models"
+	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
 	api "github.com/anicoll/winet-integration/pkg/server"
 )
 
@@ -29,9 +29,9 @@ type WinetService interface {
 }
 
 type Database interface {
-	GetLatestProperties(ctx context.Context) (iter.Seq[models.Property], error)
-	GetProperties(ctx context.Context, identifier, slug string, from, to *time.Time) ([]models.Property, error)
-	GetAmberPrices(ctx context.Context, from, to time.Time, site *string) ([]models.Amberprice, error)
+	GetLatestProperties(ctx context.Context) (iter.Seq[dbpkg.Property], error)
+	GetProperties(ctx context.Context, identifier, slug string, from, to *time.Time) ([]dbpkg.Property, error)
+	GetAmberPrices(ctx context.Context, from, to time.Time, site *string) ([]dbpkg.Amberprice, error)
 }
 
 type server struct {
@@ -208,7 +208,7 @@ func (s *server) GetProperties(w http.ResponseWriter, r *http.Request) {
 		handleError(w, err)
 		return
 	}
-	properties := []models.Property{}
+	properties := []dbpkg.Property{}
 	for prop := range props {
 		properties = append(properties, prop)
 	}

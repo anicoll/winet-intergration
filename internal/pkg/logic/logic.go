@@ -7,7 +7,7 @@ import (
 
 	"github.com/samber/lo"
 
-	"github.com/anicoll/winet-integration/internal/pkg/models"
+	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
 )
 
 type WinetCommands interface {
@@ -22,8 +22,8 @@ type WinetCommands interface {
 }
 
 type Database interface {
-	GetLatestProperties(ctx context.Context) (iter.Seq[models.Property], error)
-	GetAmberPrices(ctx context.Context, from, to time.Time, site *string) ([]models.Amberprice, error)
+	GetLatestProperties(ctx context.Context) (iter.Seq[dbpkg.Property], error)
+	GetAmberPrices(ctx context.Context, from, to time.Time, site *string) ([]dbpkg.Amberprice, error)
 }
 
 type logic struct {
@@ -38,9 +38,9 @@ func NewLogicSvc(wsvc WinetCommands, db Database) *logic {
 	}
 }
 
-func getCurrentPrice(prices []models.Amberprice, channelType string) (models.Amberprice, bool) {
+func getCurrentPrice(prices []dbpkg.Amberprice, channelType string) (dbpkg.Amberprice, bool) {
 	now := time.Now().UTC()
-	return lo.Find(prices, func(p models.Amberprice) bool {
+	return lo.Find(prices, func(p dbpkg.Amberprice) bool {
 		if p.ChannelType != channelType {
 			return false
 		}

@@ -9,15 +9,15 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
 	"github.com/anicoll/winet-integration/internal/pkg/logic"
-	"github.com/anicoll/winet-integration/internal/pkg/models"
 	logicmocks "github.com/anicoll/winet-integration/mocks/logic"
 )
 
 // currentPrice builds a non-forecast price active right now.
-func currentPrice(channelType string, perKwh float64) models.Amberprice {
+func currentPrice(channelType string, perKwh float64) dbpkg.Amberprice {
 	now := time.Now().UTC()
-	return models.Amberprice{
+	return dbpkg.Amberprice{
 		ChannelType: channelType,
 		StartTime:   now.Add(-5 * time.Minute),
 		EndTime:     now.Add(5 * time.Minute),
@@ -39,7 +39,7 @@ func TestNextBestAction_NoPrices_NoAction(t *testing.T) {
 func TestNextBestAction_NegativeGeneralPrice_SendsCharge(t *testing.T) {
 	w := logicmocks.NewWinetCommands(t)
 	db := logicmocks.NewDatabase(t)
-	prices := []models.Amberprice{
+	prices := []dbpkg.Amberprice{
 		currentPrice("general", -0.05),
 		currentPrice("feedin", 0.10),
 	}
@@ -54,7 +54,7 @@ func TestNextBestAction_NegativeGeneralPrice_SendsCharge(t *testing.T) {
 func TestNextBestAction_ZeroGeneralPrice_SendsSelfConsumption(t *testing.T) {
 	w := logicmocks.NewWinetCommands(t)
 	db := logicmocks.NewDatabase(t)
-	prices := []models.Amberprice{
+	prices := []dbpkg.Amberprice{
 		currentPrice("general", 0),
 		currentPrice("feedin", 0.10),
 	}
@@ -69,7 +69,7 @@ func TestNextBestAction_ZeroGeneralPrice_SendsSelfConsumption(t *testing.T) {
 func TestNextBestAction_PositiveGeneralPrice_SendsSelfConsumption(t *testing.T) {
 	w := logicmocks.NewWinetCommands(t)
 	db := logicmocks.NewDatabase(t)
-	prices := []models.Amberprice{
+	prices := []dbpkg.Amberprice{
 		currentPrice("general", 0.25),
 		currentPrice("feedin", 0.10),
 	}
@@ -84,7 +84,7 @@ func TestNextBestAction_PositiveGeneralPrice_SendsSelfConsumption(t *testing.T) 
 func TestNextBestAction_NegativeFeedinPrice_LimitsFeedin(t *testing.T) {
 	w := logicmocks.NewWinetCommands(t)
 	db := logicmocks.NewDatabase(t)
-	prices := []models.Amberprice{
+	prices := []dbpkg.Amberprice{
 		currentPrice("general", 0.20),
 		currentPrice("feedin", -0.10),
 	}
@@ -99,7 +99,7 @@ func TestNextBestAction_NegativeFeedinPrice_LimitsFeedin(t *testing.T) {
 func TestNextBestAction_PositiveFeedinPrice_EnablesFeedin(t *testing.T) {
 	w := logicmocks.NewWinetCommands(t)
 	db := logicmocks.NewDatabase(t)
-	prices := []models.Amberprice{
+	prices := []dbpkg.Amberprice{
 		currentPrice("general", 0.20),
 		currentPrice("feedin", 0.10),
 	}
@@ -115,7 +115,7 @@ func TestNextBestAction_ForecastPricesAreIgnored(t *testing.T) {
 	w := logicmocks.NewWinetCommands(t)
 	db := logicmocks.NewDatabase(t)
 	now := time.Now().UTC()
-	prices := []models.Amberprice{
+	prices := []dbpkg.Amberprice{
 		{
 			ChannelType: "general",
 			StartTime:   now.Add(-5 * time.Minute),
