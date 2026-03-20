@@ -8,6 +8,15 @@ import (
 	"strings"
 )
 
+// propertiesClient is a package-level client used only for the properties fetch.
+// It has its own transport so it does not mutate http.DefaultTransport.
+var propertiesClient = &http.Client{
+	Transport: &http.Transport{
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // inverter uses self-signed cert
+		TLSHandshakeTimeout: 0,
+	},
+}
+
 func (s *service) getProperties(ctx context.Context) error {
 	if s.properties != nil {
 		return nil // already loaded
@@ -16,9 +25,7 @@ func (s *service) getProperties(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	http.DefaultTransport.(*http.Transport).TLSHandshakeTimeout = 0
-	res, err := http.DefaultClient.Do(req)
+	res, err := propertiesClient.Do(req)
 	if err != nil {
 		return err
 	}

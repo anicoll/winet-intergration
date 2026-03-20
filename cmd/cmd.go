@@ -66,34 +66,26 @@ func WinetCommand(ctx *cli.Context) error {
 		},
 		DBDSN:            ctx.String("database-url"),
 		MigrationsFolder: ctx.String("migrations-folder"),
-		MqttCfg: &config.WinetConfig{
+		MqttCfg: &config.MQTTConfig{
 			Host:     ctx.String("mqtt-host"),
 			Username: ctx.String("mqtt-user"),
 			Password: ctx.String("mqtt-pass"),
 		},
+		AmberCfg: &config.AmberConfig{
+			Host:  ctx.String("amber-host"),
+			Token: ctx.String("amber-token"),
+		},
+		Timezone: ctx.String("timezone"),
 		LogLevel: ctx.String("log-level"),
 	}
 
-	if err := validateConfig(cfg); err != nil {
+	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("configuration validation failed: %w", err)
 	}
 
 	return run(ctx.Context, cfg)
 }
 
-// validateConfig ensures all required configuration values are present.
-func validateConfig(cfg *config.Config) error {
-	if cfg.WinetCfg.Host == "" {
-		return errors.New("winet host is required")
-	}
-	if cfg.WinetCfg.Username == "" {
-		return errors.New("winet username is required")
-	}
-	if cfg.WinetCfg.Password == "" {
-		return errors.New("winet password is required")
-	}
-	return nil
-}
 
 // run orchestrates all services and handles graceful shutdown.
 func run(ctx context.Context, cfg *config.Config) error {
@@ -149,7 +141,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 
 	// Start amber price processing service
 	eg.Go(func() error {
-		return startAmberPriceService(ctx, db, errorChan, logger)
+		return startAmberPriceService(ctx, cfg.AmberCfg, db, errorChan, logger)
 	})
 
 	// Start winet service with retry logic
@@ -163,7 +155,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 
 	// enable feedin at 5PM daily
 	eg.Go(func() error {
-		return dailyFeedinEnabler(ctx, winetSvc, logger)
+		return dailyFeedinEnabler(ctx, cfg.Timezone, winetSvc, logger)
 	})
 
 	// Start HTTP server
@@ -250,17 +242,14 @@ func startDbCleanupService(ctx context.Context, db *database.Database, errChan c
 	return ctx.Err()
 }
 
-func startAmberPriceService(ctx context.Context, db *database.Database, errChan chan error, logger *zap.Logger) error {
+func startAmberPriceService(ctx context.Context, amberCfg *config.AmberConfig, db *database.Database, errChan chan error, logger *zap.Logger) error {
 	logger.Info("Starting amber price service")
 
-	amberHost := os.Getenv("AMBER_HOST")
-	amberToken := os.Getenv("AMBER_TOKEN")
-
-	if amberHost == "" || amberToken == "" {
-		return errors.New("AMBER_HOST and AMBER_TOKEN environment variables are required")
+	if amberCfg == nil || amberCfg.Host == "" || amberCfg.Token == "" {
+		return errors.New("amber host and token are required")
 	}
 
-	svc, err := amber.New(ctx, amberHost, amberToken)
+	svc, err := amber.New(ctx, amberCfg.Host, amberCfg.Token)
 	if err != nil {
 		return fmt.Errorf("failed to create amber service: %w", err)
 	}
@@ -360,8 +349,11 @@ func startWinetService(ctx context.Context, winetSvc winetSvc, errChan chan erro
 	}
 }
 
-func dailyFeedinEnabler(ctx context.Context, winetSvc server.WinetService, logger *zap.Logger) error {
-	location, err := time.LoadLocation("Australia/Adelaide")
+func dailyFeedinEnabler(ctx context.Context, timezone string, winetSvc server.WinetService, logger *zap.Logger) error {
+	if timezone == "" {
+		timezone = "Australia/Adelaide"
+	}
+	location, err := time.LoadLocation(timezone)
 	if err != nil {
 		return err
 	}

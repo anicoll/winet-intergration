@@ -78,6 +78,21 @@ func main() {
 				EnvVars: []string{"LOG_LEVEL"},
 				Value:   "INFO",
 			},
+			&cli.StringFlag{
+				Name:    "amber-host",
+				EnvVars: []string{"AMBER_HOST"},
+				Value:   "",
+			},
+			&cli.StringFlag{
+				Name:    "amber-token",
+				EnvVars: []string{"AMBER_TOKEN"},
+				Value:   "",
+			},
+			&cli.StringFlag{
+				Name:    "timezone",
+				EnvVars: []string{"TIMEZONE"},
+				Value:   "Australia/Adelaide",
+			},
 		},
 	}
 
