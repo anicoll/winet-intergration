@@ -84,7 +84,6 @@ func WinetCommand(ctx *cli.Context) error {
 	return run(ctx.Context, cfg)
 }
 
-
 // run orchestrates all services and handles graceful shutdown.
 func run(ctx context.Context, cfg *config.Config) error {
 	// Setup graceful shutdown
