@@ -10,7 +10,7 @@ import (
 	"github.com/anicoll/winet-integration/internal/pkg/models"
 )
 
-type winetCommands interface {
+type WinetCommands interface {
 	SendSelfConsumptionCommand() (bool, error)
 	SendBatteryStopCommand() (bool, error)
 	SetFeedInLimitation(feedinLimited bool) (bool, error)
@@ -21,17 +21,17 @@ type winetCommands interface {
 	SendInverterStateChangeCommand(disable bool) (bool, error)
 }
 
-type database interface {
+type Database interface {
 	GetLatestProperties(ctx context.Context) (iter.Seq[models.Property], error)
 	GetAmberPrices(ctx context.Context, from, to time.Time, site *string) ([]models.Amberprice, error)
 }
 
 type logic struct {
-	inverter winetCommands
-	db       database
+	inverter WinetCommands
+	db       Database
 }
 
-func NewLogicSvc(wsvc winetCommands, db database) *logic {
+func NewLogicSvc(wsvc WinetCommands, db Database) *logic {
 	return &logic{
 		inverter: wsvc,
 		db:       db,

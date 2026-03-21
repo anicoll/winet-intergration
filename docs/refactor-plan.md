@@ -200,7 +200,7 @@ This makes it hard to reason about queries, prevents type-safe parameter binding
 
 ---
 
-### Step 1 — Fix critical websocket bugs (targeted, surgical)
+### Step 1 — Fix critical websocket bugs (targeted, surgical) ✅ DONE
 
 **Goal:** Stop crashes and deadlocks without restructuring the code yet.
 
@@ -214,8 +214,11 @@ Changes:
 - Fix `handleDirectMessage` to call `publisher.PublishData` and use `"W"` for the power unit.
 - Add `sync.RWMutex` to the global publisher registry.
 
-**Testing:** Run existing `pkg/sockets` tests. Add a new winet protocol unit test using a
-mock WebSocket server that simulates a "login timeout" mid-session.
+**Bugs fixed:** #1, #2, #3, #5, #6, #8, #9, #10
+**Bugs deferred to later steps:** #4 (goroutine accumulation — Step 3), #7 (DefaultTransport — Step 2),
+#11–#16 (config/SQL — Steps 2–4)
+
+**Testing:** Covered by Step 10 below.
 
 ---
 
@@ -460,17 +463,29 @@ Changes:
 
 **Goal:** Meaningful test coverage at all layers.
 
-| Layer | Tool | What to test |
-|---|---|---|
-| Websocket (`pkg/sockets`) | existing `httptest` approach | expand: close-during-read, ping-stop-on-close, callback ordering |
-| Winet protocol | mock WS server | login flow, timeout handling, reconnect, command/response correlation |
-| DB queries | `testcontainers-go` + real Postgres | all sqlc queries, migration correctness, DISTINCT ON dedup |
-| Publisher | mock `Publisher` | normalizer unit conversion, slug-ignore list, fan-out |
-| HTTP server | `net/http/httptest` | all endpoints, 4xx/5xx error mapping |
-| Logic | mock winet + mock DB | `NextBestAction` decision table |
+| Layer | Tool | What to test | Status |
+|---|---|---|---|
+| Websocket (`pkg/sockets`) | existing `httptest` approach | expand: close-during-read, ping-stop-on-close, callback ordering | pending |
+| Winet protocol | mockery + `winet_test.go` | login flow, timeout nil-panic regression, reconnect close, send errors | ✅ done |
+| DB queries | `testcontainers-go` + real Postgres | all sqlc queries, migration correctness, DISTINCT ON dedup | pending (blocked on Step 4) |
+| Publisher | mockery + `publisher_test.go` | unit conversion, slug-ignore, dedup, nil/dash values, text sensors, fan-out | ✅ done |
+| HTTP server | mockery + `server_test.go` | all battery/inverter/feedin states, missing-power error, GetProperties JSON + DB error | ✅ done |
+| Logic | mockery + `logic_test.go` | `NextBestAction` decision table: negative/zero/positive price, feedin, forecast exclusion, DB error | ✅ done |
 
-Add a `make test` target that runs unit tests and a separate `make test-integration`
-target that requires Docker (for `testcontainers-go`).
+**Completed in this PR:**
+- Exported all previously-unexported interfaces (`publisher.Publisher`, `logic.WinetCommands`,
+  `logic.Database`, `server.Database`) to make them mockable.
+- Added `.mockery.yaml` config and `make generate-mocks` Makefile target (runs mockery via
+  Docker: `vektra/mockery:v3`).
+- Generated mocks under `mocks/` for all four interface groups.
+- Replaced all hand-written mock structs across every test file with the generated mocks,
+  using the EXPECT() fluent API and `AssertExpectations` via `t.Cleanup`.
+
+**Still to do:**
+- Add a `make test` target that runs unit tests and a separate `make test-integration`
+  target that requires Docker (for `testcontainers-go`).
+- Expand `pkg/sockets` tests (close-during-read, ping lifecycle).
+- DB integration tests — blocked on Step 4 (sqlc migration).
 
 ---
 
@@ -503,8 +518,9 @@ Steps are ordered to avoid blocking on each other. Steps 1 and 2 are safe to do 
 since they touch the same files. Steps 8–10 build on top.
 
 ```
-Step 1  Fix websocket bugs          → merge to main (hotfix)
-Step 2  Fix transport + config types → merge to main (hotfix)
+Step 1  Fix websocket bugs          ✅ merged to main
+Step 10 Testing (unit, mockery)     ✅ merged to main (partial — unit tests done)
+Step 2  Fix transport + config types → merge to main (hotfix, next up)
 Step 3  Restructure winet service   ─┐
 Step 4  sqlc migration               ├─ feature/refactor branch
 Step 5  DI publisher                 │
@@ -512,5 +528,5 @@ Step 6  stdlib HTTP                  │
 Step 7  Config/CLI removal          ─┘ → merge to main
 Step 8  Reconnect backoff           → main
 Step 9  Re-enable services          → main
-Step 10 Testing infrastructure      → ongoing, parallel with all steps
+Step 10 Testing (integration, DB)   → ongoing, parallel with Steps 3–9
 ```

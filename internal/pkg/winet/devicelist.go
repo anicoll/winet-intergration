@@ -23,11 +23,13 @@ func (s *service) handleDeviceListMessage(data []byte, c ws.Connection) {
 			continue
 		}
 
+		s.deviceMu.Lock()
 		s.currentDevice = &model.Device{
 			ID:           strconv.Itoa(device.DeviceID),
 			Model:        device.DevModel,
 			SerialNumber: device.DevSN,
 		}
+		s.deviceMu.Unlock()
 		err = publisher.RegisterDevice(s.currentDevice)
 		s.sendIfErr(err)
 		s.logger.Debug("detected device", zap.Any("device", device), zap.Error(err))
@@ -42,19 +44,23 @@ func (s *service) handleDeviceListMessage(data []byte, c ws.Connection) {
 					Token:   s.token,
 				},
 			})
-			s.sendIfErr(err)
-
-			s.sendIfErr(c.Send(ws.Msg{
-				Body: requestData,
-			}))
-			s.waiter()
+			if err != nil {
+				s.sendIfErr(err)
+				return
+			}
+			if err = c.Send(ws.Msg{Body: requestData}); err != nil {
+				s.sendIfErr(err)
+				return
+			}
+			if _, err = s.waiter(); err != nil {
+				s.sendIfErr(err)
+				return
+			}
 		}
 	}
 	ticker := time.NewTicker(time.Second * s.cfg.PollInterval)
+	defer ticker.Stop()
 	<-ticker.C
 	s.sendDeviceListRequest(c)
 }
 
-func (s *service) waiter() any {
-	return <-s.processed
-}

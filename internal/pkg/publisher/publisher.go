@@ -17,17 +17,20 @@ import (
 var errAlreadyRegistered = errors.New("publisher already registered")
 
 var (
-	registerdPublishers = make(map[string]publisher)
+	publishersMu        sync.RWMutex
+	registerdPublishers = make(map[string]Publisher)
 	sensors             sync.Map
 )
 
-type publisher interface {
+type Publisher interface {
 	// PublishData publishes the device status data to the registered adapters
 	Write(ctx context.Context, data []map[string]any) error
 	RegisterDevice(ctx context.Context, device *model.Device) error
 }
 
-func RegisterPublisher(name string, publisher publisher) error {
+func RegisterPublisher(name string, publisher Publisher) error {
+	publishersMu.Lock()
+	defer publishersMu.Unlock()
 	if _, ok := registerdPublishers[name]; ok {
 		return errAlreadyRegistered
 	}
@@ -87,6 +90,8 @@ func PublishData(ctx context.Context, deviceStatusMap map[model.Device][]model.D
 			data = append(data, payload)
 		}
 	}
+	publishersMu.RLock()
+	defer publishersMu.RUnlock()
 	for name, publisher := range registerdPublishers {
 		if err := publisher.Write(ctx, data); err != nil {
 			zap.L().Error("failed to publish data", zap.Error(err), zap.String("publisher", name))
@@ -130,6 +135,8 @@ func ignoreSlug(slug string) bool {
 }
 
 func RegisterDevice(device *model.Device) error {
+	publishersMu.RLock()
+	defer publishersMu.RUnlock()
 	for name, publisher := range registerdPublishers {
 		if err := publisher.RegisterDevice(context.Background(), device); err != nil {
 			zap.L().Error("failed to register device", zap.Error(err), zap.String("publisher", name))

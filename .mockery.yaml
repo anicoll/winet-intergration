@@ -1,0 +1,28 @@
+log-level: warn
+structname: "{{.InterfaceName}}"
+filename: "{{.InterfaceName}}.go"
+pkgname: mocks
+template: testify
+packages:
+  github.com/anicoll/winet-integration/pkg/sockets:
+    config:
+      dir: "mocks/sockets"
+    interfaces:
+      Connection:
+  github.com/anicoll/winet-integration/internal/pkg/publisher:
+    config:
+      dir: "mocks/publisher"
+    interfaces:
+      Publisher:
+  github.com/anicoll/winet-integration/internal/pkg/logic:
+    config:
+      dir: "mocks/logic"
+    interfaces:
+      WinetCommands:
+      Database:
+  github.com/anicoll/winet-integration/internal/pkg/server:
+    config:
+      dir: "mocks/server"
+    interfaces:
+      WinetService:
+      Database:

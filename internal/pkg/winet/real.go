@@ -16,9 +16,14 @@ import (
 func (s *service) handleRealMessage(data []byte) {
 	s.logger.Debug("handleRealMessage")
 	res := model.ParsedResult[model.GenericReponse[model.GenericUnit]]{}
-	err := json.Unmarshal(data, &res)
-	s.sendIfErr(err)
-	if s.currentDevice == nil {
+	if err := json.Unmarshal(data, &res); err != nil {
+		s.sendIfErr(err)
+		return
+	}
+	s.deviceMu.RLock()
+	currentDevice := s.currentDevice
+	s.deviceMu.RUnlock()
+	if currentDevice == nil {
 		return
 	}
 	datapointsToPublish := make(map[model.Device][]model.DeviceStatus)
@@ -37,9 +42,11 @@ func (s *service) handleRealMessage(data []byte) {
 		}
 		datapoints = append(datapoints, dataPoint)
 	}
-	datapointsToPublish[*s.currentDevice] = datapoints
-	err = publisher.PublishData(contxt.NewContext(time.Second*5), datapointsToPublish)
-	s.sendIfErr(err)
+	datapointsToPublish[*currentDevice] = datapoints
+	if err := publisher.PublishData(contxt.NewContext(time.Second*5), datapointsToPublish); err != nil {
+		s.sendIfErr(err)
+		// still signal processed so waiter unblocks — the data error is non-fatal
+	}
 	s.processed <- struct{}{} // indicate we are done.
 }
 
