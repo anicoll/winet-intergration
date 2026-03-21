@@ -3,7 +3,6 @@ package cmd
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -15,7 +14,7 @@ import (
 	paho_mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/gorilla/mux"
-	_ "github.com/jackc/pgx/v5/stdlib" // pgx as database/sql driver
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/robfig/cron/v3"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
@@ -24,9 +23,9 @@ import (
 	"github.com/anicoll/winet-integration/internal/pkg/amber"
 	"github.com/anicoll/winet-integration/internal/pkg/config"
 	"github.com/anicoll/winet-integration/internal/pkg/database"
+	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
 	"github.com/anicoll/winet-integration/internal/pkg/database/migration"
 	"github.com/anicoll/winet-integration/internal/pkg/logic"
-	"github.com/anicoll/winet-integration/internal/pkg/models"
 	"github.com/anicoll/winet-integration/internal/pkg/mqtt"
 	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 	"github.com/anicoll/winet-integration/internal/pkg/server"
@@ -197,20 +196,15 @@ func setupDatabase(ctx context.Context, dsn, migrationsPath string) (*database.D
 		return nil, nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
-	sqlDB, err := sql.Open("pgx", dsn)
+	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := sqlDB.PingContext(ctx); err != nil {
+	if err := pool.Ping(ctx); err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	db := database.NewDatabase(ctx, sqlDB)
-	cleanup := func() {
-		sqlDB.Close()
-	}
-
-	return db, cleanup, nil
+	return database.NewDatabase(pool), pool.Close, nil
 }
 
 func startDbCleanupService(ctx context.Context, db *database.Database, errChan chan error, logger *zap.Logger) error {
@@ -293,7 +287,7 @@ func startAmberPriceService(ctx context.Context, amberCfg *config.AmberConfig, d
 }
 
 func fetchAndStorePrices(ctx context.Context, svc interface {
-	GetPrices(ctx context.Context, siteID string) ([]models.Amberprice, error)
+	GetPrices(ctx context.Context, siteID string) ([]dbpkg.Amberprice, error)
 }, db *database.Database, siteId string,
 ) error {
 	prices, err := svc.GetPrices(ctx, siteId)

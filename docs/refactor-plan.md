@@ -13,6 +13,7 @@ Before the steps, here is a summary of the bugs and structural issues driving th
 ### Critical Bugs
 
 #### 1. `timeoutErrChan` nil-channel panic
+
 **File:** [internal/pkg/winet/winet.go](../internal/pkg/winet/winet.go)
 
 `SubscribeToTimeout()` initialises `s.timeoutErrChan` and returns it. However, in
@@ -26,6 +27,7 @@ blocks forever; the goroutine hangs silently.
 ---
 
 #### 2. Reconnect does not close the old connection
+
 **File:** [internal/pkg/winet/winet.go:138](../internal/pkg/winet/winet.go#L138)
 
 `reconnect()` creates a brand-new `ws.New()` struct and assigns it to `s.conn`, but the
@@ -40,6 +42,7 @@ simultaneously processing messages and mutating shared state (`s.storedData`,
 ---
 
 #### 3. `processed` channel deadlock on disconnect
+
 **Files:** [internal/pkg/winet/devicelist.go](../internal/pkg/winet/devicelist.go),
 [internal/pkg/winet/real.go](../internal/pkg/winet/real.go),
 [internal/pkg/winet/inverter_commands.go](../internal/pkg/winet/inverter_commands.go)
@@ -50,6 +53,7 @@ drops between sending a query and receiving its response, the signal is never se
 `waiter()` blocks forever.
 
 Consequences:
+
 - The device list goroutine hangs indefinitely.
 - Any HTTP request that calls an inverter command (`SendChargeCommand`, etc.) also calls
   `s.waiter()` and deadlocks.
@@ -63,6 +67,7 @@ so commands can be matched to their responses individually.
 ---
 
 #### 4. Multiple concurrent `handleDeviceListMessage` goroutines
+
 **File:** [internal/pkg/winet/winet.go:117](../internal/pkg/winet/winet.go#L117)
 
 `onMessage` dispatches `handleDeviceListMessage` with `go`. Each invocation runs a full
@@ -76,6 +81,7 @@ not inside the message handler.
 ---
 
 #### 5. `ticker` not stopped in `handleDeviceListMessage`
+
 **File:** [internal/pkg/winet/devicelist.go:53](../internal/pkg/winet/devicelist.go#L53)
 
 ```go
@@ -89,6 +95,7 @@ s.sendDeviceListRequest(c)
 ---
 
 #### 6. `sendIfErr` does not stop execution
+
 **File:** [internal/pkg/winet/winet.go:45](../internal/pkg/winet/winet.go#L45)
 
 `sendIfErr` sends an error to the channel and returns. The caller continues executing.
@@ -99,6 +106,7 @@ with zero values. All of these should `return` after the error.
 ---
 
 #### 7. `http.DefaultTransport` mutated globally
+
 **File:** [internal/pkg/winet/properties.go:19](../internal/pkg/winet/properties.go#L19)
 
 ```go
@@ -113,6 +121,7 @@ outbound HTTP request (e.g., to the Amber API) inherits the insecure TLS config.
 ---
 
 #### 8. `currentDevice` race condition
+
 **Files:** [internal/pkg/winet/devicelist.go](../internal/pkg/winet/devicelist.go),
 [internal/pkg/winet/real.go](../internal/pkg/winet/real.go),
 [internal/pkg/winet/direct.go](../internal/pkg/winet/direct.go)
@@ -123,6 +132,7 @@ outbound HTTP request (e.g., to the Amber API) inherits the insecure TLS config.
 ---
 
 #### 9. `handleDirectMessage` never publishes data
+
 **File:** [internal/pkg/winet/direct.go:83](../internal/pkg/winet/direct.go#L83)
 
 The function builds `datapointsToPublish` but never calls `publisher.PublishData`. It
@@ -131,6 +141,7 @@ also uses `data.CurrentUnit` as the unit for the computed power field instead of
 ---
 
 #### 10. Global publisher registry has no mutex
+
 **File:** [internal/pkg/publisher/publisher.go:19](../internal/pkg/publisher/publisher.go#L19)
 
 `registerdPublishers` is a plain `map[string]publisher`. `RegisterPublisher` writes to it
@@ -139,6 +150,7 @@ and `PublishData` / `RegisterDevice` iterate over it without any synchronisation
 ---
 
 #### 11. `GetLatestProperties` SQL is incorrect
+
 **File:** [internal/pkg/database/read.go:68](../internal/pkg/database/read.go#L68)
 
 ```sql
@@ -154,6 +166,7 @@ The actual deduplication to "latest per identifier+slug" happens entirely in Go 
 ---
 
 #### 12. `MqttCfg` reuses the wrong config type
+
 **File:** [internal/pkg/config/config.go](../internal/pkg/config/config.go)
 
 `MqttCfg *WinetConfig` reuses the Winet config struct, which contains `Ssl bool` and
@@ -162,6 +175,7 @@ The actual deduplication to "latest per identifier+slug" happens entirely in Go 
 ---
 
 #### 13. Amber configuration not in the config struct
+
 **File:** [cmd/cmd.go:256](../cmd/cmd.go#L256)
 
 `AMBER_HOST` and `AMBER_TOKEN` are read from environment variables inside
@@ -171,6 +185,7 @@ at startup or passed in tests.
 ---
 
 #### 14. `contxt` package creates detached contexts
+
 **File:** [internal/pkg/contxt/contxt.go](../internal/pkg/contxt/contxt.go)
 
 `contxt.NewContext(time.Second*5)` creates a context with a 5-second timeout derived from
@@ -180,7 +195,9 @@ in-flight publish operations still run for up to 5 seconds.
 ---
 
 #### 15. Mixed database access patterns
+
 The codebase mixes three approaches:
+
 - Raw SQL strings with `database/sql` in `write.go` and `read.go`
 - Generated `dbtpl` models called as methods (`prop.Insert(ctx, db)`) in `write.go`
 - Both `jackc/pgx/v5` and `github.com/lib/pq` are imported as drivers
@@ -191,6 +208,7 @@ This makes it hard to reason about queries, prevents type-safe parameter binding
 ---
 
 #### 16. Commented-out services with no clear path forward
+
 `startDbCleanupService` and `startDecisionService` are fully commented out in `cmd.go`.
 `dailyFeedinEnabler` is hardcoded to 5 PM Adelaide time with no configuration.
 
@@ -205,6 +223,7 @@ This makes it hard to reason about queries, prevents type-safe parameter binding
 **Goal:** Stop crashes and deadlocks without restructuring the code yet.
 
 Changes:
+
 - Initialise `timeoutErrChan` with buffer 1 in `New()`, remove lazy init from `SubscribeToTimeout()`.
 - In `reconnect()`, call `s.conn.Close()` before creating a new connection.
 - Add `defer ticker.Stop()` in `handleDeviceListMessage`.
@@ -227,6 +246,7 @@ Changes:
 **Goal:** Eliminate global side effects and mistyped config.
 
 Changes:
+
 - In `properties.go`, replaced `http.DefaultTransport` mutation with a package-scoped
   `propertiesClient` (`*http.Client`) that has its own `*http.Transport` with
   `InsecureSkipVerify` scoped only to the inverter properties fetch.
@@ -287,6 +307,7 @@ Key design changes made:
   checks `event.Err` against `winet.ErrTimeout`.
 
 New files:
+
 - `internal/pkg/winet/poller.go` — `runPollLoop`, `queryDevices`, `sendQueryRequest`
 
 Sub-package split (`session/`, `protocol/`, `poller/`, `commands/`) deferred — the
@@ -300,11 +321,13 @@ refactor without further functional change.
 **Goal:** Type-safe, maintainable SQL with a widely-supported code generator.
 
 Tooling:
+
 - Use [sqlc](https://sqlc.dev) to generate Go code from SQL queries.
 - Use `pgx/v5` directly (drop `lib/pq` entirely).
 - Drop the `database/sql` wrapper; use `pgxpool.Pool` directly.
 
 Steps:
+
 1. Add a `sqlc.yaml` config at the project root pointing at the migrations folder.
 2. Write SQL query files in `internal/pkg/database/queries/`:
    - `properties.sql` — insert, latest-per-device (fixed with `DISTINCT ON`), range query
@@ -338,6 +361,7 @@ Currently `publisher.RegisterPublisher` and `publisher.PublishData` use package-
 globals. This makes unit testing impossible without registering real publishers.
 
 Changes:
+
 - Define a `Publisher` interface:
   ```go
   type Publisher interface {
@@ -364,6 +388,7 @@ Go 1.22 added method and path parameter support to `net/http.ServeMux`. Since th
 already targets Go 1.26, gorilla/mux adds no value.
 
 Changes:
+
 - Remove `github.com/gorilla/mux` from `go.mod`.
 - Update `cmd/cmd.go` `startHTTPServer` to use `http.NewServeMux()`.
 - Update the `oapi-codegen` config (`gen/config.yaml`) to use the `std-http-server` target
@@ -384,6 +409,7 @@ Use [github.com/caarlos0/env/v11](https://github.com/caarlos0/env) for env-var p
 into typed structs (zero dependency, no reflection magic, no global state).
 
 Config struct:
+
 ```go
 type Config struct {
     Winet struct {
@@ -427,6 +453,7 @@ The current retry loop in `startWinetService` has a fixed 5-second sleep with no
 backoff. On repeated failures (e.g., inverter rebooting) this hammers the device.
 
 Changes:
+
 - Implement exponential backoff with jitter using the standard pattern:
   ```go
   backoff := min(baseDelay * (1 << attempt), maxDelay)
@@ -445,10 +472,12 @@ Changes:
 **Goal:** Restore `startDbCleanupService` and `startDecisionService` to working order.
 
 `startDbCleanupService`:
+
 - Was commented out with no explanation. Re-enable it; it is a simple cron job.
 - Make the cleanup schedule configurable via env var.
 
 `startDecisionService` / `logic.NextBestAction`:
+
 - Logic is incomplete: the charge/feedin decision is made but there is no hysteresis
   (if price fluctuates around zero, the inverter is toggled every 5 seconds).
 - Add a minimum dwell time before switching modes (e.g., 5 minutes).
@@ -456,6 +485,7 @@ Changes:
 - Make the poll interval configurable; remove the hardcoded `time.Sleep(5 * time.Second)`.
 
 `dailyFeedinEnabler`:
+
 - Move the 5 PM schedule into the config struct as a cron expression.
 - Make the timezone derive from `Config.Timezone` instead of a hardcoded string.
 
@@ -465,16 +495,17 @@ Changes:
 
 **Goal:** Meaningful test coverage at all layers.
 
-| Layer | Tool | What to test | Status |
-|---|---|---|---|
-| Websocket (`pkg/sockets`) | existing `httptest` approach | expand: close-during-read, ping-stop-on-close, callback ordering | pending |
-| Winet protocol | mockery + `winet_test.go` | login flow, timeout regression, reconnect close, send errors, pendingCmd, poll loop, queryDevices, all message handlers | ✅ done |
-| DB queries | `testcontainers-go` + real Postgres | all sqlc queries, migration correctness, DISTINCT ON dedup | pending (blocked on Step 4) |
-| Publisher | mockery + `publisher_test.go` | unit conversion, slug-ignore, dedup, nil/dash values, text sensors, fan-out | ✅ done |
-| HTTP server | mockery + `server_test.go` | all battery/inverter/feedin states, missing-power error, GetProperties JSON + DB error | ✅ done |
-| Logic | mockery + `logic_test.go` | `NextBestAction` decision table: negative/zero/positive price, feedin, forecast exclusion, DB error | ✅ done |
+| Layer                     | Tool                                | What to test                                                                                                            | Status                      |
+| ------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| Websocket (`pkg/sockets`) | existing `httptest` approach        | expand: close-during-read, ping-stop-on-close, callback ordering                                                        | pending                     |
+| Winet protocol            | mockery + `winet_test.go`           | login flow, timeout regression, reconnect close, send errors, pendingCmd, poll loop, queryDevices, all message handlers | ✅ done                     |
+| DB queries                | `testcontainers-go` + real Postgres | all sqlc queries, migration correctness, DISTINCT ON dedup                                                              | pending (blocked on Step 4) |
+| Publisher                 | mockery + `publisher_test.go`       | unit conversion, slug-ignore, dedup, nil/dash values, text sensors, fan-out                                             | ✅ done                     |
+| HTTP server               | mockery + `server_test.go`          | all battery/inverter/feedin states, missing-power error, GetProperties JSON + DB error                                  | ✅ done                     |
+| Logic                     | mockery + `logic_test.go`           | `NextBestAction` decision table: negative/zero/positive price, feedin, forecast exclusion, DB error                     | ✅ done                     |
 
 **Completed in this PR:**
+
 - Exported all previously-unexported interfaces (`publisher.Publisher`, `logic.WinetCommands`,
   `logic.Database`, `server.Database`) to make them mockable.
 - Added `.mockery.yaml` config and `make generate-mocks` Makefile target (runs mockery via
@@ -484,6 +515,7 @@ Changes:
   using the EXPECT() fluent API and `AssertExpectations` via `t.Cleanup`.
 
 **Still to do:**
+
 - Add a `make test` target that runs unit tests and a separate `make test-integration`
   target that requires Docker (for `testcontainers-go`).
 - Expand `pkg/sockets` tests (close-during-read, ping lifecycle).
@@ -493,23 +525,23 @@ Changes:
 
 ## Dependency Changes Summary
 
-| Action | Package |
-|---|---|
-| Add | `github.com/caarlos0/env/v11` |
-| Add | `github.com/sqlc-dev/sqlc` (codegen tool only, `tools.go`) |
-| Add | `github.com/testcontainers/testcontainers-go` (test only) |
-| Remove | `github.com/gorilla/mux` |
-| Remove | `github.com/lib/pq` |
-| Remove | `github.com/urfave/cli/v2` |
+| Action | Package                                                                |
+| ------ | ---------------------------------------------------------------------- |
+| Add    | `github.com/caarlos0/env/v11`                                          |
+| Add    | `github.com/sqlc-dev/sqlc` (codegen tool only, `tools.go`)             |
+| Add    | `github.com/testcontainers/testcontainers-go` (test only)              |
+| Remove | `github.com/gorilla/mux`                                               |
+| Remove | `github.com/lib/pq`                                                    |
+| Remove | `github.com/urfave/cli/v2`                                             |
 | Remove | `github.com/gosimple/slug` (replace with inline `strings.NewReplacer`) |
-| Keep | `github.com/gorilla/websocket` |
-| Keep | `github.com/eclipse/paho.mqtt.golang` |
-| Keep | `github.com/golang-migrate/migrate/v4` |
-| Keep | `github.com/jackc/pgx/v5` |
-| Keep | `github.com/oapi-codegen/oapi-codegen/v2` |
-| Keep | `github.com/robfig/cron/v3` |
-| Keep | `go.uber.org/zap` |
-| Keep | `golang.org/x/sync` |
+| Keep   | `github.com/gorilla/websocket`                                         |
+| Keep   | `github.com/eclipse/paho.mqtt.golang`                                  |
+| Keep   | `github.com/golang-migrate/migrate/v4`                                 |
+| Keep   | `github.com/jackc/pgx/v5`                                              |
+| Keep   | `github.com/oapi-codegen/oapi-codegen/v2`                              |
+| Keep   | `github.com/robfig/cron/v3`                                            |
+| Keep   | `go.uber.org/zap`                                                      |
+| Keep   | `golang.org/x/sync`                                                    |
 
 ---
 

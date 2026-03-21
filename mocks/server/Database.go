@@ -9,7 +9,7 @@ import (
 	"iter"
 	"time"
 
-	"github.com/anicoll/winet-integration/internal/pkg/models"
+	"github.com/anicoll/winet-integration/internal/pkg/database/db"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -41,23 +41,23 @@ func (_m *Database) EXPECT() *Database_Expecter {
 }
 
 // GetAmberPrices provides a mock function for the type Database
-func (_mock *Database) GetAmberPrices(ctx context.Context, from time.Time, to time.Time, site *string) ([]models.Amberprice, error) {
+func (_mock *Database) GetAmberPrices(ctx context.Context, from time.Time, to time.Time, site *string) ([]db.Amberprice, error) {
 	ret := _mock.Called(ctx, from, to, site)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetAmberPrices")
 	}
 
-	var r0 []models.Amberprice
+	var r0 []db.Amberprice
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, *string) ([]models.Amberprice, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, *string) ([]db.Amberprice, error)); ok {
 		return returnFunc(ctx, from, to, site)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, *string) []models.Amberprice); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, *string) []db.Amberprice); ok {
 		r0 = returnFunc(ctx, from, to, site)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]models.Amberprice)
+			r0 = ret.Get(0).([]db.Amberprice)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, time.Time, time.Time, *string) error); ok {
@@ -110,34 +110,34 @@ func (_c *Database_GetAmberPrices_Call) Run(run func(ctx context.Context, from t
 	return _c
 }
 
-func (_c *Database_GetAmberPrices_Call) Return(amberprices []models.Amberprice, err error) *Database_GetAmberPrices_Call {
+func (_c *Database_GetAmberPrices_Call) Return(amberprices []db.Amberprice, err error) *Database_GetAmberPrices_Call {
 	_c.Call.Return(amberprices, err)
 	return _c
 }
 
-func (_c *Database_GetAmberPrices_Call) RunAndReturn(run func(ctx context.Context, from time.Time, to time.Time, site *string) ([]models.Amberprice, error)) *Database_GetAmberPrices_Call {
+func (_c *Database_GetAmberPrices_Call) RunAndReturn(run func(ctx context.Context, from time.Time, to time.Time, site *string) ([]db.Amberprice, error)) *Database_GetAmberPrices_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetLatestProperties provides a mock function for the type Database
-func (_mock *Database) GetLatestProperties(ctx context.Context) (iter.Seq[models.Property], error) {
+func (_mock *Database) GetLatestProperties(ctx context.Context) (iter.Seq[db.Property], error) {
 	ret := _mock.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetLatestProperties")
 	}
 
-	var r0 iter.Seq[models.Property]
+	var r0 iter.Seq[db.Property]
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context) (iter.Seq[models.Property], error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (iter.Seq[db.Property], error)); ok {
 		return returnFunc(ctx)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context) iter.Seq[models.Property]); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context) iter.Seq[db.Property]); ok {
 		r0 = returnFunc(ctx)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(iter.Seq[models.Property])
+			r0 = ret.Get(0).(iter.Seq[db.Property])
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
@@ -172,34 +172,34 @@ func (_c *Database_GetLatestProperties_Call) Run(run func(ctx context.Context)) 
 	return _c
 }
 
-func (_c *Database_GetLatestProperties_Call) Return(seq iter.Seq[models.Property], err error) *Database_GetLatestProperties_Call {
+func (_c *Database_GetLatestProperties_Call) Return(seq iter.Seq[db.Property], err error) *Database_GetLatestProperties_Call {
 	_c.Call.Return(seq, err)
 	return _c
 }
 
-func (_c *Database_GetLatestProperties_Call) RunAndReturn(run func(ctx context.Context) (iter.Seq[models.Property], error)) *Database_GetLatestProperties_Call {
+func (_c *Database_GetLatestProperties_Call) RunAndReturn(run func(ctx context.Context) (iter.Seq[db.Property], error)) *Database_GetLatestProperties_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetProperties provides a mock function for the type Database
-func (_mock *Database) GetProperties(ctx context.Context, identifier string, slug string, from *time.Time, to *time.Time) ([]models.Property, error) {
+func (_mock *Database) GetProperties(ctx context.Context, identifier string, slug string, from *time.Time, to *time.Time) ([]db.Property, error) {
 	ret := _mock.Called(ctx, identifier, slug, from, to)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetProperties")
 	}
 
-	var r0 []models.Property
+	var r0 []db.Property
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, *time.Time, *time.Time) ([]models.Property, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, *time.Time, *time.Time) ([]db.Property, error)); ok {
 		return returnFunc(ctx, identifier, slug, from, to)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, *time.Time, *time.Time) []models.Property); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, *time.Time, *time.Time) []db.Property); ok {
 		r0 = returnFunc(ctx, identifier, slug, from, to)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]models.Property)
+			r0 = ret.Get(0).([]db.Property)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, *time.Time, *time.Time) error); ok {
@@ -258,12 +258,12 @@ func (_c *Database_GetProperties_Call) Run(run func(ctx context.Context, identif
 	return _c
 }
 
-func (_c *Database_GetProperties_Call) Return(propertys []models.Property, err error) *Database_GetProperties_Call {
+func (_c *Database_GetProperties_Call) Return(propertys []db.Property, err error) *Database_GetProperties_Call {
 	_c.Call.Return(propertys, err)
 	return _c
 }
 
-func (_c *Database_GetProperties_Call) RunAndReturn(run func(ctx context.Context, identifier string, slug string, from *time.Time, to *time.Time) ([]models.Property, error)) *Database_GetProperties_Call {
+func (_c *Database_GetProperties_Call) RunAndReturn(run func(ctx context.Context, identifier string, slug string, from *time.Time, to *time.Time) ([]db.Property, error)) *Database_GetProperties_Call {
 	_c.Call.Return(run)
 	return _c
 }

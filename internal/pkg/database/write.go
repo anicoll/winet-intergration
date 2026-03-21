@@ -2,68 +2,64 @@ package database
 
 import (
 	"context"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
+	dbq "github.com/anicoll/winet-integration/internal/pkg/database/db"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
-	"github.com/anicoll/winet-integration/internal/pkg/models"
 )
 
 func (d *Database) Write(ctx context.Context, data []map[string]any) error {
-	tx, err := d.db.Begin()
+	tx, err := d.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer tx.Rollback(ctx)
 
+	qtx := d.queries.WithTx(tx)
 	for _, record := range data {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO Property (time_stamp, unit_of_measurement, value, identifier, slug)
-			VALUES ($1, $2, $3, $4, $5)
-		`, record["timestamp"], record["unit_of_measurement"], record["value"], record["identifier"], record["slug"]); err != nil {
+		if _, err := qtx.InsertProperty(ctx, dbq.InsertPropertyParams{
+			TimeStamp:         record["timestamp"].(time.Time),
+			UnitOfMeasurement: record["unit_of_measurement"].(string),
+			Value:             record["value"].(string),
+			Identifier:        record["identifier"].(string),
+			Slug:              record["slug"].(string),
+		}); err != nil {
 			return err
 		}
 	}
-
-	return tx.Commit()
+	return tx.Commit(ctx)
 }
 
 func (d *Database) RegisterDevice(ctx context.Context, device *model.Device) error {
-	_, err := d.db.ExecContext(context.Background(), `
-		INSERT INTO Device (id, model, serial_number)
-		VALUES ($1, $2, $3)
-		ON CONFLICT DO NOTHING;`, device.ID, device.Model, device.SerialNumber)
+	return d.queries.UpsertDevice(ctx, dbq.UpsertDeviceParams{
+		ID:           device.ID,
+		Model:        pgtype.Text{String: device.Model, Valid: true},
+		SerialNumber: pgtype.Text{String: device.SerialNumber, Valid: true},
+	})
+}
+
+func (d *Database) WriteAmberPrices(ctx context.Context, prices []dbq.Amberprice) error {
+	tx, err := d.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback(ctx)
 
-	return nil
-}
-
-func (db *Database) WriteProperty(ctx context.Context, prop models.Property) error {
-	return prop.Insert(ctx, db.db)
-}
-
-func (d *Database) WriteAmberPrices(ctx context.Context, prices []models.Amberprice) error {
-	tx, err := d.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
+	qtx := d.queries.WithTx(tx)
 	for _, price := range prices {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO AmberPrice (per_kwh, spot_per_kwh, start_time, end_time, duration, forecast, channel_type)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-			ON CONFLICT (start_time, channel_type) DO UPDATE
-			SET per_kwh = EXCLUDED.per_kwh,
-				spot_per_kwh = EXCLUDED.spot_per_kwh,
-				duration = EXCLUDED.duration,
-				forecast = EXCLUDED.forecast,
-				channel_type = EXCLUDED.channel_type,
-				updated_at = NOW()
-		`, price.PerKwh, price.SpotPerKwh, price.StartTime, price.EndTime, price.Duration, price.Forecast, price.ChannelType); err != nil {
+		if err := qtx.UpsertAmberPrice(ctx, dbq.UpsertAmberPriceParams{
+			PerKwh:      price.PerKwh,
+			SpotPerKwh:  price.SpotPerKwh,
+			StartTime:   price.StartTime,
+			EndTime:     price.EndTime,
+			Duration:    price.Duration,
+			Forecast:    price.Forecast,
+			ChannelType: price.ChannelType,
+		}); err != nil {
 			return err
 		}
 	}
-
-	return tx.Commit()
+	return tx.Commit(ctx)
 }
