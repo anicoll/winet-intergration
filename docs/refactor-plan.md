@@ -402,24 +402,33 @@ Changes made:
 
 ---
 
-### Step 6 — Replace gorilla/mux with `net/http` (Go 1.22+)
+### Step 6 — Replace gorilla/mux with `net/http` (Go 1.22+) ✅ DONE
 
 **Goal:** Reduce dependencies; use stdlib routing.
 
 Go 1.22 added method and path parameter support to `net/http.ServeMux`. Since the project
 already targets Go 1.26, gorilla/mux adds no value.
 
-Changes:
+Changes made:
 
-- Remove `github.com/gorilla/mux` from `go.mod`.
-- Update `cmd/cmd.go` `startHTTPServer` to use `http.NewServeMux()`.
-- Update the `oapi-codegen` config (`gen/config.yaml`) to use the `std-http-server` target
-  instead of `gorilla` so the generated handler registration uses stdlib.
-- Fix `GetPropertyIdentifierSlug`: set `Content-Type` header before calling
-  `json.NewEncoder(w).Encode(...)`.
-- Fix `handleError` to distinguish 4xx vs 5xx errors (currently always returns 500).
-- Add `http.StatusNoContent` where endpoints write no body on success instead of writing
-  the string `"success"`.
+- `gen/config.yaml` — switched `gorilla-server: true` to `std-http-server: true`.
+- Regenerated `pkg/server/api.gen.go` with oapi-codegen v2.4.1 (v2.6.0 has a build bug
+  with the `kin-openapi` type change; pinned via `go run ...@v2.4.1`). Generated code now
+  uses `r.PathValue("param")` for path parameters and `StdHTTPServerOptions` / `http.NewServeMux()`.
+- `cmd/cmd.go` — removed `gorilla/mux` import and `mux.CORSMethodMiddleware`; replaced
+  `GorillaServerOptions{BaseRouter: r, ...}` with `StdHTTPServerOptions{...}`.
+- `server/server.go` — fixed all three bugs:
+  - `GetPropertyIdentifierSlug`: `Content-Type` header now set before `json.NewEncoder(w).Encode(...)`.
+  - `handleError`: introduced `clientError` sentinel type; errors wrapping it return 400,
+    all others return 500.
+  - `PostBatteryState`, `PostInverterFeedin`, `PostInverterState`: write `204 No Content`
+    on success instead of the string `"success"`.
+  - Removed `OptionsBatteryState` (no longer in the generated `ServerInterface`).
+  - `unmarshalPayload` now wraps read/decode errors in `clientError` so JSON parse failures
+    return 400 instead of 500.
+- `go.mod` — `github.com/gorilla/mux` removed via `go mod tidy`.
+- `server_test.go` — updated success assertions from `200` → `204`; missing-power error
+  assertion updated from `500` → `400`.
 
 ---
 
@@ -580,7 +589,7 @@ Step 2  Fix transport + config types ✅ merged to main
 Step 3  Restructure winet service   ✅ merged to main
 Step 4  sqlc migration               ─┐  ✅ done (feature/refactor branch)
 Step 5  DI publisher                  ├─ ✅ done (feature/refactor branch)
-Step 6  stdlib HTTP                   │
+Step 6  stdlib HTTP                   ├─ ✅ done (feature/refactor branch)
 Step 7  Config/CLI removal           ─┘ → merge to main
 Step 8  Reconnect backoff           → main
 Step 9  Re-enable services          → main

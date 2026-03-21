@@ -51,7 +51,7 @@ func TestPostBatteryState_SelfConsumption(t *testing.T) {
 		State: api.SelfConsumption,
 	}), "self_consumption")
 
-	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
 
 func TestPostBatteryState_Stop(t *testing.T) {
@@ -64,7 +64,7 @@ func TestPostBatteryState_Stop(t *testing.T) {
 		State: api.Stop,
 	}), "stop")
 
-	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
 
 func TestPostBatteryState_Charge_SendsPower(t *testing.T) {
@@ -79,7 +79,7 @@ func TestPostBatteryState_Charge_SendsPower(t *testing.T) {
 		Power: &power,
 	}), "charge")
 
-	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
 
 func TestPostBatteryState_Discharge_SendsPower(t *testing.T) {
@@ -94,7 +94,7 @@ func TestPostBatteryState_Discharge_SendsPower(t *testing.T) {
 		Power: &power,
 	}), "discharge")
 
-	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
 
 func TestPostBatteryState_Charge_MissingPower_ReturnsError(t *testing.T) {
@@ -107,7 +107,7 @@ func TestPostBatteryState_Charge_MissingPower_ReturnsError(t *testing.T) {
 		// Power is nil — should fail
 	}), "charge")
 
-	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 // --- PostInverterFeedin ---
@@ -120,7 +120,7 @@ func TestPostInverterFeedin_Disable(t *testing.T) {
 	rec := httptest.NewRecorder()
 	svc.PostInverterFeedin(rec, postJSON(t, api.ChangeFeedinPayload{Disable: true}))
 
-	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
 
 func TestPostInverterFeedin_Enable(t *testing.T) {
@@ -131,7 +131,7 @@ func TestPostInverterFeedin_Enable(t *testing.T) {
 	rec := httptest.NewRecorder()
 	svc.PostInverterFeedin(rec, postJSON(t, api.ChangeFeedinPayload{Disable: false}))
 
-	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
 
 // --- PostInverterState ---
@@ -144,7 +144,7 @@ func TestPostInverterState_Off(t *testing.T) {
 	rec := httptest.NewRecorder()
 	svc.PostInverterState(rec, httptest.NewRequest(http.MethodPost, "/", nil), string(api.Off))
 
-	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
 
 func TestPostInverterState_On(t *testing.T) {
@@ -155,7 +155,7 @@ func TestPostInverterState_On(t *testing.T) {
 	rec := httptest.NewRecorder()
 	svc.PostInverterState(rec, httptest.NewRequest(http.MethodPost, "/", nil), string(api.On))
 
-	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
 
 // --- GetProperties ---

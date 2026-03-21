@@ -41,12 +41,6 @@ type server struct {
 	loc    *time.Location
 }
 
-// OptionsBatteryState implements api.ServerInterface.
-func (s *server) OptionsBatteryState(w http.ResponseWriter, r *http.Request, state string) {
-	w.Header().Set("Allow", "POST,OPTIONS")
-	w.WriteHeader(http.StatusOK)
-}
-
 func New(ws WinetService, db Database) *server {
 	return &server{
 		winets: ws,
@@ -56,6 +50,33 @@ func New(ws WinetService, db Database) *server {
 	}
 }
 
+// clientError wraps errors that should produce a 400 response.
+type clientError struct{ err error }
+
+func (e *clientError) Error() string { return e.err.Error() }
+func (e *clientError) Unwrap() error { return e.err }
+
+func handleError(w http.ResponseWriter, err error) {
+	var ce *clientError
+	if errors.As(err, &ce) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	http.Error(w, err.Error(), http.StatusInternalServerError)
+}
+
+func unmarshalPayload[T any](r *http.Request) (*T, error) {
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, &clientError{err}
+	}
+	var out T
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, &clientError{err}
+	}
+	return &out, nil
+}
+
 func (s *server) GetAmberPricesFromTo(w http.ResponseWriter, r *http.Request, from time.Time, to time.Time, params api.GetAmberPricesFromToParams) {
 	ctx := r.Context()
 	amberPrices, err := s.db.GetAmberPrices(ctx, from.In(s.loc), to.In(s.loc), params.Site)
@@ -63,7 +84,6 @@ func (s *server) GetAmberPricesFromTo(w http.ResponseWriter, r *http.Request, fr
 		handleError(w, err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
 	res := []api.AmberPrice{}
 	for _, price := range amberPrices {
 		res = append(res, api.AmberPrice{
@@ -79,7 +99,7 @@ func (s *server) GetAmberPricesFromTo(w http.ResponseWriter, r *http.Request, fr
 			Id:          price.ID,
 		})
 	}
-
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(res); err != nil {
 		handleError(w, err)
 		return
@@ -97,7 +117,7 @@ func (s *server) PostBatteryState(w http.ResponseWriter, r *http.Request, state 
 		handleError(w, err)
 		return
 	}
-	w.Write([]byte("success"))
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *server) PostInverterFeedin(w http.ResponseWriter, r *http.Request) {
@@ -117,7 +137,7 @@ func (s *server) PostInverterFeedin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.logger.Info("limit feed in switched", zap.Bool("disable_feedin", feedinReq.Disable))
-	w.Write([]byte("success"))
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *server) PostInverterState(w http.ResponseWriter, r *http.Request, state string) {
@@ -127,11 +147,10 @@ func (s *server) PostInverterState(w http.ResponseWriter, r *http.Request, state
 		return
 	}
 	if !success {
-		err = errors.New("failed to change inverter state to " + state)
-		handleError(w, err)
+		handleError(w, errors.New("failed to change inverter state to "+state))
 		return
 	}
-	w.Write([]byte("success"))
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *server) changeBatteryState(req *api.ChangeBatteryStatePayload) error {
@@ -156,7 +175,7 @@ func (s *server) changeBatteryState(req *api.ChangeBatteryStatePayload) error {
 		}
 	case api.Charge:
 		if req.Power == nil {
-			return errors.New("power param cannot be empty")
+			return &clientError{errors.New("power param cannot be empty")}
 		}
 		s.logger.Info("switching battery to", zap.String("state", string(req.State)), zap.String("power", *req.Power))
 		success, err := s.winets.SendChargeCommand(*req.Power)
@@ -166,10 +185,9 @@ func (s *server) changeBatteryState(req *api.ChangeBatteryStatePayload) error {
 		if !success {
 			return errors.New("failed to send discharge command")
 		}
-		// handle Charge power request
 	case api.Discharge:
 		if req.Power == nil {
-			return errors.New("power param cannot be empty")
+			return &clientError{errors.New("power param cannot be empty")}
 		}
 		s.logger.Info("switching battery to", zap.String("state", string(req.State)), zap.String("power", *req.Power))
 		success, err := s.winets.SendDischargeCommand(*req.Power)
@@ -181,23 +199,6 @@ func (s *server) changeBatteryState(req *api.ChangeBatteryStatePayload) error {
 		}
 	}
 	return nil
-}
-
-func handleError(w http.ResponseWriter, err error) {
-	w.WriteHeader(http.StatusInternalServerError)
-	w.Write([]byte(err.Error()))
-}
-
-func unmarshalPayload[T any](r *http.Request) (*T, error) {
-	data, err := io.ReadAll(r.Body)
-	if err != nil {
-		return nil, err
-	}
-	var out T
-	if err := json.Unmarshal(data, &out); err != nil {
-		return nil, err
-	}
-	return &out, nil
 }
 
 // GetProperties implements api.ServerInterface.
@@ -227,9 +228,9 @@ func (s *server) GetPropertyIdentifierSlug(w http.ResponseWriter, r *http.Reques
 		handleError(w, err)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(props); err != nil {
 		handleError(w, err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
 }

@@ -11,8 +11,8 @@ import (
 	"github.com/anicoll/winet-integration/cmd"
 )
 
-//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen --config=./gen/config.yaml ./gen/api.yaml
-//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen --config=./gen/amber/config.yaml ./gen/amber/api.json
+//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.6.0 --config=./gen/config.yaml ./gen/api.yaml
+//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.6.0 --config=./gen/amber/config.yaml ./gen/amber/api.json
 
 func main() {
 	app := &cli.App{

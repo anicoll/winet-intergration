@@ -7,7 +7,6 @@ require (
 	github.com/getkin/kin-openapi v0.134.0
 	github.com/goburrow/modbus v0.1.0
 	github.com/golang-migrate/migrate/v4 v4.19.1
-	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/gosimple/slug v1.15.0
 	github.com/jackc/pgx/v5 v5.8.0
