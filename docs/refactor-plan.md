@@ -245,13 +245,6 @@ Changes:
 
 **Goal:** Eliminate global side effects and mistyped config.
 
-Changes:
-<<<<<<< HEAD
-
-=======
-
-> > > > > > > 1422913 (update doc)
-
 - In `properties.go`, replaced `http.DefaultTransport` mutation with a package-scoped
   `propertiesClient` (`*http.Client`) that has its own `*http.Transport` with
   `InsecureSkipVerify` scoped only to the inverter properties fetch.
