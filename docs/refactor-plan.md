@@ -258,44 +258,40 @@ Changes:
 
 ---
 
-### Step 3 — Restructure the winet service (major)
+### Step 3 — Restructure the winet service (major) ✅ DONE
 
 **Goal:** Replace the monolithic `service` struct with composable, testable pieces.
 
-The current struct does: connection management, protocol parsing, message dispatch,
-polling loop, command sending, and data publishing — all tightly coupled.
+Key design changes made:
 
-Proposed split:
+- **Eliminated `processed chan any` and `timeoutErrChan chan error`.** Replaced with:
+  - `pendingCmd` — a thread-safe single-slot struct for serial request/response
+    correlation. `wait(ctx)` registers a buffered channel; `deliver(v)` sends to it
+    non-blockingly. No goroutine leak if nobody is waiting (no-op deliver).
+  - `events chan SessionEvent` — session lifecycle events (timeout, errors) delivered
+    here instead of a separate channel. Exposed via `Events() <-chan SessionEvent`.
+- **Polling loop moved to a dedicated goroutine** (`runPollLoop` in `poller.go`).
+  Cancelling the poll context (stored as `cancelPoll`) is the only way to stop it.
+  `Connect()` cancels the previous poll loop before starting a new one — no goroutine
+  accumulation on reconnect (fixes Bug #4).
+- **`loginReady chan struct{}`** created fresh on every `Connect()` call. Closed by
+  `handleLoginMessage` to unblock `runPollLoop` after the login handshake completes.
+  The poll loop sends the first device list request — not the login handler.
+- **`handleDeviceListMessage` simplified** to parse + `pending.deliver(list)`. All
+  device iteration, per-stage querying, ticker, and recursion removed (fixes Bug #5 —
+  ticker leak; fixes Bug #4 — goroutine accumulation).
+- **`handleRealMessage` / `handleDirectMessage`** now call `pending.deliver` instead of
+  `processed <-`.
+- **`handleParamMessage` / inverter commands** use `pending.wait(s.ctx)` / `pending.deliver`.
+- **`SubscribeToTimeout()` removed.** `cmd.go` now selects on `winetSvc.Events()` and
+  checks `event.Err` against `winet.ErrTimeout`.
 
-```
-internal/pkg/winet/
-  session/
-    session.go      -- manages a single connected WebSocket session lifecycle
-    reconnect.go    -- retry/backoff logic around session
-  protocol/
-    messages.go     -- request/response types (move from model/)
-    handler.go      -- stateless message parsing and dispatch
-  poller/
-    poller.go       -- the device poll loop (owns the goroutine, cancellable via context)
-  commands/
-    commands.go     -- inverter command builders and response correlation
-```
+New files:
+- `internal/pkg/winet/poller.go` — `runPollLoop`, `queryDevices`, `sendQueryRequest`
 
-Key design changes:
-- **Eliminate `processed` channel.** Replace with a `pendingRequests` map:
-  ```go
-  type pendingRequests struct {
-      mu      sync.Mutex
-      pending map[string]chan<- response  // keyed by request correlation ID
-  }
-  ```
-  Each command sends a request, registers a channel, then selects on `ctx.Done()` or the
-  channel. The message handler looks up the correlation ID and routes the response.
-- **Polling loop owned by context.** `poller.Run(ctx, conn)` runs a single goroutine.
-  Cancelling `ctx` is the only way to stop it. No recursion, no ticker leak.
-- **Session lifecycle events via channel, not callbacks.** Replace the current
-  `SubscribeToTimeout()` with a `<-chan SessionEvent` that emits `Connected`,
-  `Disconnected`, and `Error` events. The reconnect loop in `cmd.go` reacts to these.
+Sub-package split (`session/`, `protocol/`, `poller/`, `commands/`) deferred — the
+behavioural fixes are in place; the directory reorganisation can happen as a follow-up
+refactor without further functional change.
 
 ---
 
@@ -472,7 +468,7 @@ Changes:
 | Layer | Tool | What to test | Status |
 |---|---|---|---|
 | Websocket (`pkg/sockets`) | existing `httptest` approach | expand: close-during-read, ping-stop-on-close, callback ordering | pending |
-| Winet protocol | mockery + `winet_test.go` | login flow, timeout nil-panic regression, reconnect close, send errors | ✅ done |
+| Winet protocol | mockery + `winet_test.go` | login flow, timeout regression, reconnect close, send errors, pendingCmd, poll loop, queryDevices, all message handlers | ✅ done |
 | DB queries | `testcontainers-go` + real Postgres | all sqlc queries, migration correctness, DISTINCT ON dedup | pending (blocked on Step 4) |
 | Publisher | mockery + `publisher_test.go` | unit conversion, slug-ignore, dedup, nil/dash values, text sensors, fan-out | ✅ done |
 | HTTP server | mockery + `server_test.go` | all battery/inverter/feedin states, missing-power error, GetProperties JSON + DB error | ✅ done |
@@ -527,11 +523,11 @@ since they touch the same files. Steps 8–10 build on top.
 Step 1  Fix websocket bugs          ✅ merged to main
 Step 10 Testing (unit, mockery)     ✅ merged to main (partial — unit tests done)
 Step 2  Fix transport + config types ✅ merged to main
-Step 3  Restructure winet service   ─┐  ← next up
-Step 4  sqlc migration               ├─ feature/refactor branch
-Step 5  DI publisher                 │
-Step 6  stdlib HTTP                  │
-Step 7  Config/CLI removal          ─┘ → merge to main
+Step 3  Restructure winet service   ✅ merged to main
+Step 4  sqlc migration               ─┐  ← next up (feature/refactor branch)
+Step 5  DI publisher                  ├─ feature/refactor branch
+Step 6  stdlib HTTP                   │
+Step 7  Config/CLI removal           ─┘ → merge to main
 Step 8  Reconnect backoff           → main
 Step 9  Re-enable services          → main
 Step 10 Testing (integration, DB)   → ongoing, parallel with Steps 3–9

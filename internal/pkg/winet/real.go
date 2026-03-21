@@ -47,7 +47,7 @@ func (s *service) handleRealMessage(data []byte) {
 		s.sendIfErr(err)
 		// still signal processed so waiter unblocks — the data error is non-fatal
 	}
-	s.processed <- struct{}{} // indicate we are done.
+	s.pending.deliver(struct{}{}) // unblock the poll loop
 }
 
 func (s *service) calculateValue(device model.GenericUnit) *string {

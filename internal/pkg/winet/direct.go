@@ -88,5 +88,5 @@ func (s *service) handleDirectMessage(data []byte) {
 		s.sendIfErr(err)
 		// still signal processed so waiter unblocks — the publish error is non-fatal
 	}
-	s.processed <- struct{}{} // indicate we are done.
+	s.pending.deliver(struct{}{}) // unblock the poll loop
 }

@@ -22,31 +22,84 @@ const EnglishLang string = "en_us"
 
 const waiterTimeout = 30 * time.Second
 
+// SessionEvent is emitted on the Events() channel for significant session lifecycle changes.
+type SessionEvent struct {
+	Err error // ErrTimeout on login timeout; other errors for unexpected failures
+}
+
+// pendingCmd provides a thread-safe single-slot channel for request/response correlation.
+// The inverter protocol is strictly serial (one outstanding request at a time) so a
+// single slot is sufficient. deliver is a no-op when nobody is waiting.
+type pendingCmd struct {
+	mu sync.Mutex
+	ch chan any
+}
+
+func (p *pendingCmd) wait(ctx context.Context) (any, error) {
+	ch := make(chan any, 1)
+	p.mu.Lock()
+	p.ch = ch
+	p.mu.Unlock()
+	defer func() {
+		p.mu.Lock()
+		p.ch = nil
+		p.mu.Unlock()
+	}()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(waiterTimeout):
+		return nil, errors.New("timed out waiting for device response")
+	case v := <-ch:
+		return v, nil
+	}
+}
+
+func (p *pendingCmd) deliver(v any) {
+	p.mu.Lock()
+	ch := p.ch
+	p.mu.Unlock()
+	if ch != nil {
+		select {
+		case ch <- v:
+		default:
+		}
+	}
+}
+
 type service struct {
-	cfg            *config.WinetConfig
-	properties     map[string]string
-	conn           ws.Connection
-	errChan        chan error
-	timeoutErrChan chan error
-	token          string
-	logger         *zap.Logger
-	storedData     []byte
-	ctx            context.Context // set in Connect; used by waiter
+	cfg        *config.WinetConfig
+	properties map[string]string
+	conn       ws.Connection
+	errChan    chan error
+	events     chan SessionEvent
+	token      string
+	logger     *zap.Logger
+	storedData []byte
+	ctx        context.Context // set in Connect; used by inverter commands
 
 	deviceMu      sync.RWMutex
 	currentDevice *model.Device
-	processed     chan any // used to communicate when messages are processed.
+
+	pending    pendingCmd
+	loginReady chan struct{} // closed by handleLoginMessage to start poll loop
+	cancelPoll context.CancelFunc
 }
 
 func New(cfg *config.WinetConfig, errChan chan error) *service {
 	return &service{
-		cfg:            cfg,
-		errChan:        errChan,
-		logger:         zap.L(), // returns the global logger.
-		storedData:     []byte{},
-		processed:      make(chan any),
-		timeoutErrChan: make(chan error, 1),
+		cfg:        cfg,
+		errChan:    errChan,
+		logger:     zap.L(),
+		storedData: []byte{},
+		events:     make(chan SessionEvent, 1),
 	}
+}
+
+// Events returns the channel on which session lifecycle events are delivered.
+// Callers should select on this and ctx.Done() to detect login timeouts.
+func (s *service) Events() <-chan SessionEvent {
+	return s.events
 }
 
 func (s *service) sendIfErr(err error) {
@@ -107,9 +160,11 @@ func (s *service) onMessage(data []byte, c ws.Connection) {
 
 	s.logger.Debug("received message", zap.String("result", result.ResultMessage), zap.String("query_stage", result.ResultData.Service.String()))
 	if result.ResultMessage == "login timeout" {
-		// do we need to control is from here?
 		s.logger.Debug("login timeout, reconnecting")
-		s.timeoutErrChan <- ErrTimeout
+		select {
+		case s.events <- SessionEvent{Err: ErrTimeout}:
+		default:
+		}
 		err := s.reconnect(context.Background())
 		s.onError(err)
 		return
@@ -124,7 +179,7 @@ func (s *service) onMessage(data []byte, c ws.Connection) {
 	case model.Connect:
 		s.handleConnectMessage(data, c)
 	case model.DeviceList:
-		go s.handleDeviceListMessage(data, c)
+		s.handleDeviceListMessage(data, c)
 	case model.Param:
 		go s.handleParamMessage(data, c)
 	case model.Local:
@@ -186,29 +241,30 @@ func (s *service) reconnect(ctx context.Context) error {
 
 func (s *service) Connect(ctx context.Context) error {
 	s.ctx = ctx
+
+	// Cancel the previous poll loop, if any, before starting a fresh one.
+	if s.cancelPoll != nil {
+		s.cancelPoll()
+		s.cancelPoll = nil
+	}
+
+	// Fresh loginReady channel for every Connect cycle so the poll loop blocks
+	// until the login handshake completes.
+	s.loginReady = make(chan struct{})
+
 	if err := s.getProperties(ctx); err != nil {
 		s.logger.Error("failed to get properties", zap.Error(err))
 		return err
 	}
 	s.logger.Info("received properties")
-	return s.reconnect(ctx)
-}
 
-func (s *service) SubscribeToTimeout() <-chan error {
-	return s.timeoutErrChan
-}
-
-// waiter blocks until a response is published to the processed channel, the
-// parent context is cancelled, or the waiterTimeout elapses. It returns the
-// value and a non-nil error on the latter two cases so callers can bail out
-// instead of deadlocking.
-func (s *service) waiter() (any, error) {
-	select {
-	case <-s.ctx.Done():
-		return nil, s.ctx.Err()
-	case <-time.After(waiterTimeout):
-		return nil, errors.New("timed out waiting for device response")
-	case v := <-s.processed:
-		return v, nil
+	if err := s.reconnect(ctx); err != nil {
+		return err
 	}
+
+	pollCtx, cancelPoll := context.WithCancel(ctx)
+	s.cancelPoll = cancelPoll
+	go s.runPollLoop(pollCtx)
+
+	return nil
 }
