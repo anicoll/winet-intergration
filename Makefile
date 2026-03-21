@@ -5,6 +5,7 @@ generate-api:
 
 .PHONY: generate-mocks
 generate-mocks:
+	find mocks -mindepth 1 -name '*.go' -delete
 	docker run --rm -v $(shell pwd):/src -w /src vektra/mockery:3
 
 .PHONY: generate-sqlc

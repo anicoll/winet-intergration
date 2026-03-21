@@ -10,7 +10,6 @@ import (
 
 	"github.com/anicoll/winet-integration/internal/pkg/contxt"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
-	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 )
 
 func (s *service) handleDirectMessage(data []byte) {
@@ -84,7 +83,7 @@ func (s *service) handleDirectMessage(data []byte) {
 	}
 
 	datapointsToPublish[*currentDevice] = datapoints
-	if err := publisher.PublishData(contxt.NewContext(time.Second*5), datapointsToPublish); err != nil {
+	if err := s.publisher.PublishData(contxt.NewContext(time.Second*5), datapointsToPublish); err != nil {
 		s.sendIfErr(err)
 		// still signal processed so waiter unblocks — the publish error is non-fatal
 	}

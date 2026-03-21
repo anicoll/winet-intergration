@@ -8,13 +8,14 @@ import (
 	"time"
 
 	"github.com/anicoll/winet-integration/internal/pkg/model"
+	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 )
 
 var configuredDevices map[string]struct{}
 
-func (s *service) Write(ctx context.Context, data []map[string]any) error {
+func (s *service) Write(ctx context.Context, data []publisher.DataPoint) error {
 	for _, d := range data {
-		if err := s.PublishData(d); err != nil {
+		if err := s.publishDataPoint(d); err != nil {
 			return err
 		}
 	}
@@ -45,15 +46,15 @@ func (s *service) RegisterDevice(_ context.Context, device *model.Device) error 
 	return nil
 }
 
-func (s *service) PublishData(data map[string]any) error {
-	isTextSensor := model.TextSensors.HasSlug(data["slug"].(string))
-	topic := fmt.Sprintf("homeassistant/sensor/%s/%s/state", data["identifier"], data["slug"].(string))
+func (s *service) publishDataPoint(data publisher.DataPoint) error {
+	isTextSensor := model.TextSensors.HasSlug(data.Slug)
+	topic := fmt.Sprintf("homeassistant/sensor/%s/%s/state", data.Identifier, data.Slug)
 
 	payload := map[string]string{
-		"value": data["value"].(string),
+		"value": data.Value,
 	}
 	if !isTextSensor {
-		payload["unit_of_measurement"] = data["unit_of_measurement"].(string)
+		payload["unit_of_measurement"] = data.UnitOfMeasurement
 	}
 
 	publishData, err := json.Marshal(payload)
