@@ -432,47 +432,49 @@ Changes made:
 
 ---
 
-### Step 7 — Configuration: env vars + YAML with validation
+### Step 7 — Configuration: env vars + YAML with validation ✅ DONE
 
 **Goal:** Single, validated, fully-documented config source.
 
-Use [github.com/caarlos0/env/v11](https://github.com/caarlos0/env) for env-var parsing
-into typed structs (zero dependency, no reflection magic, no global state).
+Changes made:
 
-Config struct:
+- **`internal/pkg/config/config.go`** — added `env` struct tags from
+  [github.com/caarlos0/env/v11](https://github.com/caarlos0/env) to all config types.
+  Sub-config fields changed from pointers (`*WinetConfig`) to values (`WinetConfig`) so
+  caarlos0/env can parse nested structs directly. Added `Load() (*Config, error)` as the
+  single entry point for configuration; removed the hand-written `Validate()` method
+  (validation is now handled by `env:"...,required"` tags and defaults by `envDefault:`).
+  ```go
+  type Config struct {
+      WinetCfg         WinetConfig
+      MqttCfg          MQTTConfig
+      AmberCfg         AmberConfig
+      LogLevel         string `env:"LOG_LEVEL"          envDefault:"info"`
+      DBDSN            string `env:"DATABASE_URL,required"`
+      MigrationsFolder string `env:"MIGRATIONS_FOLDER"  envDefault:"migrations"`
+      Timezone         string `env:"TIMEZONE"           envDefault:"Australia/Adelaide"`
+  }
+  type WinetConfig struct {
+      Host         string        `env:"WINET_HOST,required"`
+      Username     string        `env:"WINET_USERNAME,required"`
+      Password     string        `env:"WINET_PASSWORD,required"`
+      Ssl          bool          `env:"WINET_SSL"`
+      PollInterval time.Duration `env:"WINET_POLL_INTERVAL" envDefault:"30s"`
+  }
+  ```
+- **`cmd/cmd.go`** — removed `WinetCommand` (the urfave/cli entry point) and the
+  `urfave/cli/v2` import. Renamed `run` → `Run` (exported). Updated two pointer call
+  sites: `winet.New(&cfg.WinetCfg, ...)` and `startAmberPriceService(ctx, &cfg.AmberCfg, ...)`.
+- **`main.go`** — replaced the entire `cli.App` setup (95 lines) with a 7-line main:
+  parse env via `config.Load()`, then call `cmd.Run()`.
+- **`go.mod`** — added `github.com/caarlos0/env/v11 v11.4.0`; removed
+  `github.com/urfave/cli/v2` and `github.com/goburrow/modbus` (dead `md()` function
+  removed from main.go); upgraded `github.com/oapi-codegen/runtime v1.1.2 → v1.3.0`
+  (required for v2.6.0-generated code to compile).
 
-```go
-type Config struct {
-    Winet struct {
-        Host         string        `env:"WINET_HOST,required"`
-        Username     string        `env:"WINET_USERNAME,required"`
-        Password     string        `env:"WINET_PASSWORD,required"`
-        SSL          bool          `env:"WINET_SSL"`
-        PollInterval time.Duration `env:"WINET_POLL_INTERVAL" envDefault:"30s"`
-    }
-    MQTT struct {
-        Host     string `env:"MQTT_HOST"`
-        Username string `env:"MQTT_USERNAME"`
-        Password string `env:"MQTT_PASSWORD"`
-    }
-    Amber struct {
-        Host  string `env:"AMBER_HOST"`
-        Token string `env:"AMBER_TOKEN"`
-    }
-    Database struct {
-        DSN              string `env:"DATABASE_URL,required"`
-        MigrationsFolder string `env:"MIGRATIONS_FOLDER" envDefault:"migrations"`
-    }
-    Timezone string `env:"TIMEZONE" envDefault:"Australia/Adelaide"`
-    LogLevel string `env:"LOG_LEVEL"       envDefault:"info"`
-}
-```
-
-- Remove `github.com/urfave/cli/v2`. The CLI adds no value since all config comes from
-  env vars. Replace with a simple `main.go` that parses env, validates, and calls `run()`.
-- Retain the existing `config.yaml` as documentation of all supported env vars.
-- Add a startup validation step that checks all `required` fields and logs actionable
-  errors before attempting any connections.
+**Testing:** `internal/pkg/config/config_test.go` rewritten to test `Load()` via
+environment variables using `t.Setenv` / `os.Unsetenv`: success case, defaults, all four
+required-field missing cases, and a custom-values case. Coverage: 100%.
 
 ---
 
@@ -590,7 +592,7 @@ Step 3  Restructure winet service   ✅ merged to main
 Step 4  sqlc migration               ─┐  ✅ done (feature/refactor branch)
 Step 5  DI publisher                  ├─ ✅ done (feature/refactor branch)
 Step 6  stdlib HTTP                   ├─ ✅ done (feature/refactor branch)
-Step 7  Config/CLI removal           ─┘ → merge to main
+Step 7  Config/CLI removal           ─┘  ✅ done (feature/refactor branch) → merge to main
 Step 8  Reconnect backoff           → main
 Step 9  Re-enable services          → main
 Step 10 Testing (integration, DB)   → ongoing, parallel with Steps 3–9
