@@ -222,15 +222,15 @@ Changes:
 
 ---
 
-### Step 2 — Fix `http.DefaultTransport` mutation and config types
+### Step 2 — Fix `http.DefaultTransport` mutation and config types ✅ DONE
 
 **Goal:** Eliminate global side effects and mistyped config.
 
 Changes:
-- In `properties.go`, replace `http.DefaultClient` usage with a locally constructed
-  `*http.Client` that has its own `*http.Transport` with `InsecureSkipVerify` scoped only
-  to that client.
-- Add a dedicated `MQTTConfig` struct to `internal/pkg/config`:
+- In `properties.go`, replaced `http.DefaultTransport` mutation with a package-scoped
+  `propertiesClient` (`*http.Client`) that has its own `*http.Transport` with
+  `InsecureSkipVerify` scoped only to the inverter properties fetch.
+- Added a dedicated `MQTTConfig` struct:
   ```go
   type MQTTConfig struct {
       Host     string
@@ -238,17 +238,23 @@ Changes:
       Password string
   }
   ```
-- Add `AmberConfig` to the config struct:
+- Added `AmberConfig` to the config struct:
   ```go
   type AmberConfig struct {
       Host  string
       Token string
   }
   ```
-- Add configurable `Timezone string` field (default `"Australia/Adelaide"`).
-- Validate all required fields at startup in one place.
+- Added `Timezone string` field to `Config` (default `"Australia/Adelaide"` via CLI flag).
+- Added `Config.Validate()` method in the config package — single place for all required-field
+  checks. Removed the now-redundant `validateConfig` function from `cmd.go`.
+- `startAmberPriceService` now accepts `*config.AmberConfig` instead of reading
+  `AMBER_HOST`/`AMBER_TOKEN` env vars directly; config is visible and validated at startup.
+- `dailyFeedinEnabler` now takes a `timezone string` parameter instead of the hardcoded
+  `"Australia/Adelaide"` string.
+- Added `--amber-host`, `--amber-token`, and `--timezone` CLI flags to `main.go`.
 
-**Testing:** Add config validation unit tests.
+**Testing:** Config validation unit tests added in `internal/pkg/config/config_test.go`.
 
 ---
 
@@ -520,8 +526,8 @@ since they touch the same files. Steps 8–10 build on top.
 ```
 Step 1  Fix websocket bugs          ✅ merged to main
 Step 10 Testing (unit, mockery)     ✅ merged to main (partial — unit tests done)
-Step 2  Fix transport + config types → merge to main (hotfix, next up)
-Step 3  Restructure winet service   ─┐
+Step 2  Fix transport + config types ✅ merged to main
+Step 3  Restructure winet service   ─┐  ← next up
 Step 4  sqlc migration               ├─ feature/refactor branch
 Step 5  DI publisher                 │
 Step 6  stdlib HTTP                  │
