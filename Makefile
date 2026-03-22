@@ -28,3 +28,6 @@ tidy:
 build:
 	go build .
 
+.PHONY: lint
+lint:
+	golangci-lint run ./...

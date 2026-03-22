@@ -9,10 +9,11 @@ import (
 	"strings"
 	"time"
 
-	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
-	ac "github.com/anicoll/winet-integration/pkg/amber"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"go.uber.org/zap"
+
+	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
+	ac "github.com/anicoll/winet-integration/pkg/amber"
 )
 
 type client struct {

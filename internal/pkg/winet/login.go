@@ -3,9 +3,10 @@ package winet
 import (
 	"encoding/json"
 
+	"go.uber.org/zap"
+
 	"github.com/anicoll/winet-integration/internal/pkg/model"
 	ws "github.com/anicoll/winet-integration/pkg/sockets"
-	"go.uber.org/zap"
 )
 
 func (s *service) sendDeviceListRequest(c ws.Connection) {

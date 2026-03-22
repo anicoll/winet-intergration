@@ -124,6 +124,7 @@ func (c *Conn) Dial(ctx context.Context, url, subProtocol string) error {
 		}
 		return err
 	}
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != 101 {
 		err := errors.New("unexpected status code: " + res.Status)
 		if c.onError != nil {
@@ -199,14 +200,11 @@ func (c *Conn) readLoop(ctx context.Context) {
 			// Process message queue callbacks
 			if len(c.msgQueue) > 0 {
 				c.mu.Lock()
-				for i, qMsg := range c.msgQueue {
-					if qMsg.Callback != nil {
-						go qMsg.Callback(msg, c)
-					}
-					// Remove processed message
-					c.msgQueue = append(c.msgQueue[:i], c.msgQueue[i+1:]...)
-					break
+				qMsg := c.msgQueue[0]
+				if qMsg.Callback != nil {
+					go qMsg.Callback(msg, c)
 				}
+				c.msgQueue = c.msgQueue[1:]
 				c.mu.Unlock()
 			}
 		}
@@ -215,7 +213,7 @@ func (c *Conn) readLoop(ctx context.Context) {
 
 func (c *Conn) closeUnsafe() {
 	if c.ws != nil {
-		c.ws.Close()
+		_ = c.ws.Close()
 	}
 	c.closed = true
 	select {

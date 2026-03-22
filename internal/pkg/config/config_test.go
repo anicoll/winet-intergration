@@ -16,9 +16,9 @@ func unsetenv(t *testing.T, key string) {
 	require.NoError(t, os.Unsetenv(key))
 	t.Cleanup(func() {
 		if wasSet {
-			os.Setenv(key, old)
+			require.NoError(t, os.Setenv(key, old))
 		} else {
-			os.Unsetenv(key)
+			require.NoError(t, os.Unsetenv(key))
 		}
 	})
 }

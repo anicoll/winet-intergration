@@ -34,7 +34,7 @@ func (s *service) handleRealMessage(data []byte) {
 		}
 		dataPoint := model.DeviceStatus{
 			Name:  name,
-			Slug:  strings.Replace(slug.Make(name), "-", "_", -1),
+			Slug:  strings.ReplaceAll(slug.Make(name), "-", "_"),
 			Unit:  string(device.DataUnit),
 			Value: s.calculateValue(device),
 			Dirty: true,

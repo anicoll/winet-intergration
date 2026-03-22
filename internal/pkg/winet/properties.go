@@ -29,6 +29,7 @@ func (s *service) getProperties(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	defer func() { _ = res.Body.Close() }()
 	data, err := io.ReadAll(res.Body)
 	if err != nil {
 		return err
