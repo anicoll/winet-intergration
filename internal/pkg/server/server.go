@@ -36,20 +36,22 @@ type Database interface {
 }
 
 type server struct {
-	winets  WinetService
-	db      Database
-	authSvc *auth.Service
-	logger  *zap.Logger
-	loc     *time.Location
+	winets        WinetService
+	db            Database
+	authSvc       *auth.Service
+	secureCookies bool
+	logger        *zap.Logger
+	loc           *time.Location
 }
 
-func New(ws WinetService, db Database, authSvc *auth.Service) *server {
+func New(ws WinetService, db Database, authSvc *auth.Service, secureCookies bool) *server {
 	return &server{
-		winets:  ws,
-		logger:  zap.L(),
-		db:      db,
-		authSvc: authSvc,
-		loc:     time.Now().Location(),
+		winets:        ws,
+		logger:        zap.L(),
+		db:            db,
+		authSvc:       authSvc,
+		secureCookies: secureCookies,
+		loc:           time.Now().Location(),
 	}
 }
 
@@ -224,7 +226,7 @@ func (s *server) PostAuthLogin(w http.ResponseWriter, r *http.Request) {
 		Value:    refreshToken,
 		Path:     "/auth/refresh",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   s.secureCookies,
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   int(s.authSvc.RefreshTokenTTL().Seconds()),
 	})
@@ -259,7 +261,7 @@ func (s *server) PostAuthLogout(w http.ResponseWriter, r *http.Request) {
 		Name:     refreshCookieName,
 		Path:     "/auth/refresh",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   s.secureCookies,
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   -1,
 	})

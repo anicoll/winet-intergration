@@ -151,7 +151,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	// Start HTTP server
 	eg.Go(func() error {
-		return startHTTPServer(ctx, winetSvc, db, authSvc, health, cfg.AllowedOrigins, logger)
+		return startHTTPServer(ctx, winetSvc, db, authSvc, health, cfg.AllowedOrigins, cfg.AuthCfg.SecureCookies, logger)
 	})
 
 	// Start error handler
@@ -406,10 +406,10 @@ func startDecisionService(ctx context.Context, winetSvc server.WinetService, db 
 	}
 }
 
-func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db *database.Database, authSvc *auth.Service, health *healthState, allowedOrigins []string, logger *zap.Logger) error {
+func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db *database.Database, authSvc *auth.Service, health *healthState, allowedOrigins []string, secureCookies bool, logger *zap.Logger) error {
 	logger.Info("Starting HTTP server", zap.String("addr", serverAddr))
 
-	apiHandler := api.HandlerWithOptions(server.New(winetSvc, db, authSvc), api.StdHTTPServerOptions{
+	apiHandler := api.HandlerWithOptions(server.New(winetSvc, db, authSvc, secureCookies), api.StdHTTPServerOptions{
 		Middlewares: []api.MiddlewareFunc{server.TimeoutMiddleware, server.LoggingMiddleware(allowedOrigins), server.AuthMiddleware(authSvc)},
 		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			logger.Error("HTTP handler error", zap.Error(err))
