@@ -27,7 +27,7 @@ import (
 // newTestServer builds a server with a nil auth service.
 // Safe for tests that don't exercise auth endpoints.
 func newTestServer(w WinetService, db Database) *server {
-	return New(w, db, nil)
+	return New(w, db, nil, false)
 }
 
 func postJSON(t *testing.T, body any) *http.Request {
@@ -232,7 +232,7 @@ func newAuthService(t *testing.T) *auth.Service {
 
 func newAuthTestServer(t *testing.T) *server {
 	t.Helper()
-	return New(servermocks.NewWinetService(t), servermocks.NewDatabase(t), newAuthService(t))
+	return New(servermocks.NewWinetService(t), servermocks.NewDatabase(t), newAuthService(t), false)
 }
 
 // --- PostAuthLogin ---

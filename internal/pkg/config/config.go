@@ -50,6 +50,7 @@ type AmberConfig struct {
 
 type AuthConfig struct {
 	JWTSecret       string        `env:"JWT_SECRET,required"`
-	AccessTokenTTL  time.Duration `env:"JWT_ACCESS_TTL"  envDefault:"15m"`
-	RefreshTokenTTL time.Duration `env:"JWT_REFRESH_TTL" envDefault:"720h"`
+	AccessTokenTTL  time.Duration `env:"JWT_ACCESS_TTL"   envDefault:"15m"`
+	RefreshTokenTTL time.Duration `env:"JWT_REFRESH_TTL"  envDefault:"720h"`
+	SecureCookies   bool          `env:"SECURE_COOKIES"   envDefault:"true"`
 }
