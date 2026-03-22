@@ -34,7 +34,7 @@ func newTestService() *service {
 	svc := New(&config.WinetConfig{Username: "user", Password: "pass"}, noopPublisher{}, make(chan error, 32))
 	svc.ctx = context.Background()
 	svc.properties = map[string]string{} // bypass HTTP fetch in getProperties
-	svc.loginReady = make(chan struct{})  // pre-init so handlers don't panic
+	svc.loginReady = make(chan struct{}) // pre-init so handlers don't panic
 	return svc
 }
 
@@ -521,8 +521,7 @@ func TestRunPollLoop_SendsDeviceListAfterLogin(t *testing.T) {
 	})
 	svc.conn = conn
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	go svc.runPollLoop(ctx)
 	close(svc.loginReady)

@@ -90,7 +90,6 @@ func TestNormalizer_UnitConversions(t *testing.T) {
 	device := model.Device{ID: "1", Model: "XH3000", SerialNumber: "SN-CONV"}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.inputUnit, func(t *testing.T) {
 			v := tc.inputValue
 			dp, skip := n.Normalize(device, model.DeviceStatus{Slug: "test_power", Unit: tc.inputUnit, Value: &v})
