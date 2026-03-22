@@ -38,3 +38,7 @@ func (d *Database) GetAmberPrices(ctx context.Context, from, to time.Time, site 
 		StartTime_2: to,
 	})
 }
+
+func (d *Database) GetUserByUsername(ctx context.Context, username string) (dbq.User, error) {
+	return d.queries.GetUserByUsername(ctx, username)
+}

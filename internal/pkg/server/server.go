@@ -11,6 +11,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/anicoll/winet-integration/internal/pkg/auth"
 	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
 	api "github.com/anicoll/winet-integration/pkg/server"
 )
@@ -35,18 +36,20 @@ type Database interface {
 }
 
 type server struct {
-	winets WinetService
-	db     Database
-	logger *zap.Logger
-	loc    *time.Location
+	winets  WinetService
+	db      Database
+	authSvc *auth.Service
+	logger  *zap.Logger
+	loc     *time.Location
 }
 
-func New(ws WinetService, db Database) *server {
+func New(ws WinetService, db Database, authSvc *auth.Service) *server {
 	return &server{
-		winets: ws,
-		logger: zap.L(),
-		db:     db,
-		loc:    time.Now().Location(),
+		winets:  ws,
+		logger:  zap.L(),
+		db:      db,
+		authSvc: authSvc,
+		loc:     time.Now().Location(),
 	}
 }
 
@@ -199,6 +202,68 @@ func (s *server) changeBatteryState(req *api.ChangeBatteryStatePayload) error {
 		}
 	}
 	return nil
+}
+
+const refreshCookieName = "refresh_token"
+
+func (s *server) PostAuthLogin(w http.ResponseWriter, r *http.Request) {
+	req, err := unmarshalPayload[api.LoginRequest](r)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	accessToken, refreshToken, err := s.authSvc.Login(r.Context(), req.Username, req.Password)
+	if err != nil {
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     refreshCookieName,
+		Value:    refreshToken,
+		Path:     "/auth/refresh",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   int(s.authSvc.RefreshTokenTTL().Seconds()),
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(api.LoginResponse{AccessToken: accessToken})
+}
+
+func (s *server) PostAuthRefresh(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie(refreshCookieName)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	accessToken, err := s.authSvc.Refresh(r.Context(), cookie.Value)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(api.LoginResponse{AccessToken: accessToken})
+}
+
+func (s *server) PostAuthLogout(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie(refreshCookieName); err == nil {
+		s.authSvc.Logout(r.Context(), cookie.Value)
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     refreshCookieName,
+		Path:     "/auth/refresh",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   -1,
+	})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // GetProperties implements api.ServerInterface.

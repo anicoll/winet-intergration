@@ -29,6 +29,8 @@ func setRequiredEnv(t *testing.T) {
 	t.Setenv("WINET_USERNAME", "admin")
 	t.Setenv("WINET_PASSWORD", "secret")
 	t.Setenv("DATABASE_URL", "postgres://localhost/test")
+	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough-32c")
+	t.Setenv("ALLOWED_ORIGIN", "http://localhost:5173")
 }
 
 func TestLoad_Success(t *testing.T) {

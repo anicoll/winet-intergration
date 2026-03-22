@@ -11,7 +11,6 @@ import (
 
 	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
 	ac "github.com/anicoll/winet-integration/pkg/amber"
-	"github.com/anicoll/winet-integration/pkg/utils"
 	"go.uber.org/zap"
 )
 
@@ -43,8 +42,8 @@ func New(ctx context.Context, server, token string) (*client, error) {
 		loc:      time.Now().Location(),
 	}
 	if sites := os.Getenv("AMBER_SITES"); sites != "" {
-		siteIDs := strings.Split(sites, ",")
-		for _, siteID := range siteIDs {
+		siteIDs := strings.SplitSeq(sites, ",")
+		for siteID := range siteIDs {
 			amberClient.sites = append(amberClient.sites, ac.Site{
 				Id: siteID,
 			})
@@ -75,8 +74,8 @@ func (c *client) GetSites() []ac.Site {
 
 func (c *client) GetPrices(ctx context.Context, siteID string) ([]dbpkg.Amberprice, error) {
 	response, err := c.aClient.GetCurrentPricesWithResponse(ctx, siteID, &ac.GetCurrentPricesParams{
-		Next:     utils.ToPtr(1600),
-		Previous: utils.ToPtr(400),
+		Next:     new(1600),
+		Previous: new(400),
 	}, withToken(c.apiToken))
 	if err != nil {
 		return nil, err

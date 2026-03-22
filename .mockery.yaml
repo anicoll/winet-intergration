@@ -26,3 +26,9 @@ packages:
     interfaces:
       WinetService:
       Database:
+  github.com/anicoll/winet-integration/internal/pkg/auth:
+    config:
+      dir: "mocks/auth"
+    interfaces:
+      UserStore:
+      TokenStore:

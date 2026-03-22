@@ -13,6 +13,9 @@ generate-mocks:
 generate-sqlc:
 	docker run --rm -v $(shell pwd):/src -w /src sqlc/sqlc:1.28.0 generate
 
+.PHONY: gen-all
+gen-all: generate-api generate-mocks generate-sqlc
+
 .PHONY: test
 test:
 	go test -cover ./... -count=1
