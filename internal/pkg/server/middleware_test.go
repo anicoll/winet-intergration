@@ -139,9 +139,10 @@ func TestAuthMiddleware_HealthExempt(t *testing.T) {
 
 func TestLoggingMiddleware_SetsCORSHeaders(t *testing.T) {
 	origin := "https://example.com"
-	handler := LoggingMiddleware(origin)(okHandler)
+	handler := LoggingMiddleware([]string{origin})(okHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/properties", nil)
+	req.Header.Set("Origin", origin)
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -151,9 +152,11 @@ func TestLoggingMiddleware_SetsCORSHeaders(t *testing.T) {
 }
 
 func TestLoggingMiddleware_OptionsReturns204(t *testing.T) {
-	handler := LoggingMiddleware("https://example.com")(okHandler)
+	origin := "https://example.com"
+	handler := LoggingMiddleware([]string{origin})(okHandler)
 
 	req := httptest.NewRequest(http.MethodOptions, "/properties", nil)
+	req.Header.Set("Origin", origin)
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -161,10 +164,11 @@ func TestLoggingMiddleware_OptionsReturns204(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
 
-func TestLoggingMiddleware_NoCORSWhenOriginEmpty(t *testing.T) {
-	handler := LoggingMiddleware("")(okHandler)
+func TestLoggingMiddleware_NoCORSWhenOriginNotAllowed(t *testing.T) {
+	handler := LoggingMiddleware([]string{"https://example.com"})(okHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/properties", nil)
+	req.Header.Set("Origin", "https://evil.com")
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
