@@ -48,3 +48,11 @@ type Property struct {
 	Identifier        string    `json:"identifier"`
 	Slug              string    `json:"slug"`
 }
+
+type User struct {
+	ID           int                `json:"id"`
+	Username     string             `json:"username"`
+	PasswordHash string             `json:"password_hash"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}

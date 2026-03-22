@@ -11,10 +11,12 @@ type Config struct {
 	WinetCfg         WinetConfig
 	MqttCfg          MQTTConfig
 	AmberCfg         AmberConfig
+	AuthCfg          AuthConfig
 	LogLevel         string `env:"LOG_LEVEL"          envDefault:"info"`
 	DBDSN            string `env:"DATABASE_URL,required"`
 	MigrationsFolder string `env:"MIGRATIONS_FOLDER"  envDefault:"migrations"`
 	Timezone         string `env:"TIMEZONE"           envDefault:"Australia/Adelaide"`
+	AllowedOrigin    string `env:"ALLOWED_ORIGIN,required"`
 }
 
 // Load parses configuration from environment variables.
@@ -44,4 +46,10 @@ type MQTTConfig struct {
 type AmberConfig struct {
 	Host  string `env:"AMBER_HOST"`
 	Token string `env:"AMBER_TOKEN"`
+}
+
+type AuthConfig struct {
+	JWTSecret       string        `env:"JWT_SECRET,required"`
+	AccessTokenTTL  time.Duration `env:"JWT_ACCESS_TTL"  envDefault:"15m"`
+	RefreshTokenTTL time.Duration `env:"JWT_REFRESH_TTL" envDefault:"720h"`
 }

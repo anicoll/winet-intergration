@@ -106,6 +106,17 @@ type ChangeInverterStatePayloadState string
 // Empty defines model for Empty.
 type Empty = map[string]interface{}
 
+// LoginRequest defines model for LoginRequest.
+type LoginRequest struct {
+	Password string `json:"password"`
+	Username string `json:"username"`
+}
+
+// LoginResponse defines model for LoginResponse.
+type LoginResponse struct {
+	AccessToken string `json:"access_token"`
+}
+
 // Property defines model for Property.
 type Property struct {
 	Id                *int       `json:"id,omitempty"`
@@ -127,6 +138,9 @@ type GetPropertyIdentifierSlugParams struct {
 	To   *time.Time `form:"to,omitempty" json:"to,omitempty"`
 }
 
+// PostAuthLoginJSONRequestBody defines body for PostAuthLogin for application/json ContentType.
+type PostAuthLoginJSONRequestBody = LoginRequest
+
 // PostBatteryStateJSONRequestBody defines body for PostBatteryState for application/json ContentType.
 type PostBatteryStateJSONRequestBody = ChangeBatteryStatePayload
 
@@ -141,6 +155,15 @@ type ServerInterface interface {
 
 	// (GET /amber/prices/{from}/{to})
 	GetAmberPricesFromTo(w http.ResponseWriter, r *http.Request, from time.Time, to time.Time, params GetAmberPricesFromToParams)
+	// Login
+	// (POST /auth/login)
+	PostAuthLogin(w http.ResponseWriter, r *http.Request)
+	// Logout and revoke refresh token
+	// (POST /auth/logout)
+	PostAuthLogout(w http.ResponseWriter, r *http.Request)
+	// Refresh access token using httpOnly cookie
+	// (POST /auth/refresh)
+	PostAuthRefresh(w http.ResponseWriter, r *http.Request)
 
 	// (POST /battery/{state})
 	PostBatteryState(w http.ResponseWriter, r *http.Request, state string)
@@ -203,6 +226,48 @@ func (siw *ServerInterfaceWrapper) GetAmberPricesFromTo(w http.ResponseWriter, r
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAmberPricesFromTo(w, r, from, to, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAuthLogin operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthLogin(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAuthLogin(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAuthLogout operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthLogout(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAuthLogout(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAuthRefresh operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthRefresh(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAuthRefresh(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -464,6 +529,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc("GET "+options.BaseURL+"/amber/prices/{from}/{to}", wrapper.GetAmberPricesFromTo)
+	m.HandleFunc("POST "+options.BaseURL+"/auth/login", wrapper.PostAuthLogin)
+	m.HandleFunc("POST "+options.BaseURL+"/auth/logout", wrapper.PostAuthLogout)
+	m.HandleFunc("POST "+options.BaseURL+"/auth/refresh", wrapper.PostAuthRefresh)
 	m.HandleFunc("POST "+options.BaseURL+"/battery/{state}", wrapper.PostBatteryState)
 	m.HandleFunc("POST "+options.BaseURL+"/inverter/feedin", wrapper.PostInverterFeedin)
 	m.HandleFunc("POST "+options.BaseURL+"/inverter/{state}", wrapper.PostInverterState)
@@ -476,24 +544,28 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/9RWS4/bNhD+KwLbo9aSN+0edNsUTbvoxagXCNAgMGhpZDMRHzscbSoY+u8FKVkPW3Zs",
-	"1C2Smy0O5/Hxm5lvx1ItjVagyLJkx2y6Bcn9z0e5BlygSMH9M6gNIAnwZ+mWKwXFc2X8YQY2RWFIaMUS",
-	"JlQmUk5gA5EHtIXAOCeBsEEOkAkVaAw2oAB5MWMhg7+5NAWwhLUfWcjIO2aWUKgNq0OWInCC7JFcuP7G",
-	"fXz/5m4e38Xz5/l9EsdJHP/FQpZrlJxYwjJOcEdCwpTPrETepHxYwf4kECqQQpUEdpjoz50zoQg2gM4b",
-	"qOzZBbpdfrlGSLmlaxDmwf5W+01joDSNcCYsoQu31roArlw8kY2Sn09VaQD/+LId2cWz+f2bnzpjVTre",
-	"OFtrNC2usSeOdGMMS5PdmDd1yBBeSoGQseSDA23ApMGjhaMmGTJ4mFXPm2H9I+w60D92uej1J0jJ1ffL",
-	"lqsNvOVEgNWSOMGCV4Xm2XHPGv0FcATDw+xhAjLrvHg7VUpXooUiX6Va2VKatsp0y3Hj8syE7X5b0sYl",
-	"2cM8cVM4/hpO268i2+Rxuuh3fpicLDcTlq+LMZemmX8Qd3/xdOQn9QpIgOfxPsLR16/zfIzRzVD5VRqq",
-	"XLyjk0WTV3Wc4yUtLzJQJHJxQB62/P0h/nO5epxP9Z0tys3YfM3Tz6VZ5a4YUGk1dct1nCUuzS0ngBK0",
-	"0vlKArclggR1MAs+v99O3XvlRXkwieZx/NX3Oc0eZylUrv0TCfIe3wsFdLcMloCvgCxkr4C2mfHzWTyL",
-	"XSLagOJGsIS98Z9CTxT/fBF3szPyk95Guxy1rKMd6dodbsAX6p7bD6enjCXsN6B+r9t3qOWz9h6RSyBA",
-	"y5IPbtvkvCw8tO2vlqIvJaB7OcWlx0CQb3wvGgbU67HZjajdXnN5siFsTV/2bm40qCeDkz4b+iLPH50H",
-	"a7SyTRvdx7FXRVpRSy9uTOFWtNAq+mQbjdEHEQTSX/wRIWcJ+yHqVVjUSrBooL/qLgWOyKuGS2NJgEAl",
-	"Kht4RjS7386cYR2yaN3sh2jnp0fdbAM7QY+FtjRcJsfUmEDUtpanQZ3E76UES291Vl0F3TnETi/DCcAa",
-	"48CbBZ3dv3zYc9k183kik7TJxMMY7MPvn060uyZqtPP5p9svpmY1sv8S5fH2PY2vs3My2gKRUBv7LUN8",
-	"UXuMlv/32B+T6uX7bZCxoDm19Ba91f8xuzvFdcHk7gsY1hYyW0rJsWryDwZlDsuuol2vz+po53RXfQEQ",
-	"1VN3a+mk2iU8HgjBa8g8vYZtE/V6NwcSpNUSVy7wE868NvgWtcA1fNorAWsgFblIB9QJ1lWQi4IAG2lQ",
-	"1/8EAAD//yQGXqEAEgAA",
+	"H4sIAAAAAAAC/9RX32/bNhD+Vwhuj04kp10f/JYOaxes2IIkQIEVRUBLJ4uNRDLHo1PB0P8+kJItyZYT",
+	"G3O39i2xjvfju++OH1c80aXRChRZPltxm+RQivDnZTkHvEaZgP/PoDaAJCF8S3KhFBR3lQkfU7AJSkNS",
+	"Kz7jUqUyEQSWyYxRDsx4J0xalgGkUjGNbAEKUBTnfMLhqyhNAXzG2x/5hFNwzC2hVAteT3iCIAjSS/Lh",
+	"uhMX8cWrs2l8Fk/vphezOJ7F8d98wjONpSA+46kgOCNZwpjP1KFoUt6uYP2FScVKqRyB7Sf6y8aZVAQL",
+	"QO8NVHrnA50uv0wjJMLSMQgLtj7V/qaRKU0DnAkdbMLNtS5AKB9PpoPkp2NVGsA/nvKBXXw+vXj1emOs",
+	"nOeNt7VG0/Ux9iSQToyhM+mJeVNPOMKjkwgpn33yoPWY1GvaZDAkfQb3s+p4069/gN0G9M+bXPT8CyTk",
+	"6/s1F2oBbwURYHVLguBaVIUW6e7MGv0EOIDhzfmbEcis9xLslCt9iRaK7D7RyrrStFUmucCFzzOVdvO3",
+	"JW18kh3MIyel568RlL+IbJPH/qLfhWWyt9xUWjEvhlwaZ/5W3PXB/ZGv1BKQAJ/HewfHUL/OsiFGJ0Pl",
+	"t9JQ5ePtfPmgF1LdwKODZpls8UJY+6RxOPzcOgNoIUGg0bmygEpsj6oo/G3xUgmbs5Mu9lhBbdrWaGVH",
+	"7iCRJGDtPekHUL2y9wQdWI9Fu26cV7uBDtmLMgVFMpNbE8Zvf38T39zeX07HQLSFWwzN5yJ5cOY+85mD",
+	"SqqxU34tWRKlOeWaVJLudXZfgrAOoQS1tTAfPuZj55aicFscmMbxiwzYP2LeUqpMh4ZKCh4/SgV0dstu",
+	"AZeAfMKXgLa5CKfn8XnsE9EGlDCSz/ir8NMkTFNoXyT8BROF69BGqwx1WUcr0rX/uIBQqG932OBXKZ/x",
+	"90Cd+LHvUJd3OnhEUQIBWj775K/kTLgiQNv+1c7xowP0nWvmg1tJYTsGZTVK1NVg/ttjPk/eh61ZXp2b",
+	"E91mo8FJPxv6IM+fvYdmeEMfLuI4SEetqKWXMKbwOkZqFX2xjRDrgkiCMhz8GSHjM/5T1EnVqNWpUU+k",
+	"1psUBKKoGi4NdRMCOVSWBUY0Asmee8N6wiPhKI8Kv3Oa29KOMONaW7p0lIfV1EIElt7qtDqqtudKGmzr",
+	"ejg6vhH1v8T1gNjtyh1BMBgw68I2zVzhUX8dT3cl6pVaikKmLEEIq1EUNqwB68pSYLV2xQfQa0cHYe/t",
+	"dlB4vZvEB71YQMq8+U5s7YgJlTKEpX4AhpAh2Jw1F0SXVfv7y2ndtIb/Z3f+hCfWXHTrOvZ056ZfLZNt",
+	"rzQy+GoC04Zwrc37vpmzUi1YTmT+UkXFEq0fJDTIzRs9Gq2CWqmfB68vXne37Mhysq3l/v00uopOP6n7",
+	"xfdIbxpjFszYxu4bsqXRgyOZJE0mAUaGPTr51slW20bNW/351q2FcCPF+bdEeaj29+Pr7fyz3QKRVAv7",
+	"PUN80HgMHhs/4nyMvpZ+3AEZvg326cfrzuq/kEGbx8sBIqgroF9bf92/B2K9MvtlV9Gqe+rU0co/YeoD",
+	"gKiuNqdu/avnEB733lTHkHlc0dom6vFuttR8K8uP1MJ7nAWZ/T3K6mP4tBbV1kAiM5n0qMPmFctkQYCN",
+	"yq7rfwIAAP//QetIXXAWAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
