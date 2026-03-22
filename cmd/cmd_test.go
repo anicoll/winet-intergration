@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
 	cmdmocks "github.com/anicoll/winet-integration/mocks/cmd"
-	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // --- fetchAndStoreUsage ---
@@ -47,11 +47,11 @@ func TestFetchAndStoreUsage_DateRangeIsSevenDaysEndingYesterday(t *testing.T) {
 	after := time.Now()
 
 	// endDate should be yesterday relative to when the call was made
-	assert.True(t, capturedEnd.Time.After(before.AddDate(0, 0, -1).Add(-time.Second)))
-	assert.True(t, capturedEnd.Time.Before(after.AddDate(0, 0, -1).Add(time.Second)))
+	assert.True(t, capturedEnd.After(before.AddDate(0, 0, -1).Add(-time.Second)))
+	assert.True(t, capturedEnd.Before(after.AddDate(0, 0, -1).Add(time.Second)))
 
 	// startDate = now-7d, endDate = now-1d → 6-day window
-	diff := capturedEnd.Time.Sub(capturedStart.Time)
+	diff := capturedEnd.Sub(capturedStart.Time)
 	assert.Equal(t, 6*24*time.Hour, diff)
 }
 

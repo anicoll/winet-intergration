@@ -28,7 +28,6 @@ import (
 	"github.com/anicoll/winet-integration/internal/pkg/database"
 	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
 	"github.com/anicoll/winet-integration/internal/pkg/database/migration"
-	"github.com/anicoll/winet-integration/internal/pkg/logic"
 	"github.com/anicoll/winet-integration/internal/pkg/mqtt"
 	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 	"github.com/anicoll/winet-integration/internal/pkg/server"
@@ -212,35 +211,6 @@ func setupDatabase(ctx context.Context, dsn, migrationsPath string) (*database.D
 	}
 
 	return database.NewDatabase(pool), pool.Close, nil
-}
-
-func startDbCleanupService(ctx context.Context, db *database.Database, errChan chan error, logger *zap.Logger) error {
-	logger.Info("Starting database cleanup service")
-
-	// Setup cron job
-	c := cron.New()
-	if _, err := c.AddFunc(dbCleanupSchedule, func() {
-		if err := db.Cleanup(context.Background()); err != nil {
-			logger.Error("database cleanup failed", zap.Error(err))
-			select {
-			case errChan <- fmt.Errorf("%w: %v", errCron, err):
-			default:
-				logger.Warn("error channel full, dropping error")
-			}
-			return
-		}
-		logger.Info("database cleanup completed")
-	}); err != nil {
-		return fmt.Errorf("failed to schedule database cleanup: %w", err)
-	}
-
-	c.Start()
-
-	// Wait for context cancellation
-	<-ctx.Done()
-	c.Stop()
-	logger.Info("Database cleanup service stopped")
-	return ctx.Err()
 }
 
 func startAmberPriceService(ctx context.Context, amberCfg *config.AmberConfig, db *database.Database, errChan chan error, logger *zap.Logger) error {
@@ -458,33 +428,6 @@ func dailyFeedinEnabler(ctx context.Context, timezone string, winetSvc server.Wi
 	return ctx.Err()
 }
 
-func startDecisionService(ctx context.Context, winetSvc server.WinetService, db *database.Database, errChan chan error, logger *zap.Logger) error {
-	logger.Info("Starting logic service")
-
-	svc := logic.NewLogicSvc(winetSvc, db)
-
-	for {
-		select {
-		case <-ctx.Done():
-			logger.Info("logic service stopped")
-			return nil
-		default:
-			time.Sleep(5 * time.Second) // Delay to avoid tight loop
-
-			if err := svc.NextBestAction(ctx); err != nil {
-				logger.Error("logic service error", zap.Error(err))
-				select {
-				case errChan <- fmt.Errorf("%w: %v", errCron, err):
-				default:
-					logger.Warn("error channel full, dropping error")
-				}
-				return err
-			}
-			logger.Info("Next best action executed successfully")
-		}
-	}
-}
-
 func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db *database.Database, authSvc *auth.Service, health *healthState, allowedOrigins []string, secureCookies bool, logger *zap.Logger) error {
 	logger.Info("Starting HTTP server", zap.String("addr", serverAddr))
 
@@ -510,7 +453,7 @@ func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db *data
 	})
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"status":%q}`, health.get())
+		_, _ = fmt.Fprintf(w, `{"status":%q}`, health.get())
 	})
 
 	srv := &http.Server{

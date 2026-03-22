@@ -12,10 +12,10 @@ type Config struct {
 	MqttCfg          MQTTConfig
 	AmberCfg         AmberConfig
 	AuthCfg          AuthConfig
-	LogLevel         string `env:"LOG_LEVEL"          envDefault:"info"`
-	DBDSN            string `env:"DATABASE_URL,required"`
-	MigrationsFolder string `env:"MIGRATIONS_FOLDER"  envDefault:"migrations"`
-	Timezone         string `env:"TIMEZONE"           envDefault:"Australia/Adelaide"`
+	LogLevel         string   `env:"LOG_LEVEL"          envDefault:"info"`
+	DBDSN            string   `env:"DATABASE_URL,required"`
+	MigrationsFolder string   `env:"MIGRATIONS_FOLDER"  envDefault:"migrations"`
+	Timezone         string   `env:"TIMEZONE"           envDefault:"Australia/Adelaide"`
 	AllowedOrigins   []string `env:"ALLOWED_ORIGIN,required" envSeparator:","`
 }
 

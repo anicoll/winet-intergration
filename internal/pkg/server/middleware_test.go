@@ -63,7 +63,7 @@ func TestAuthMiddleware_ValidToken_PassesThrough(t *testing.T) {
 	svc := newMiddlewareAuthService(t)
 	handler := AuthMiddleware(svc)(okHandler)
 
-	req := httptest.NewRequest(http.MethodGet, "/properties", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/properties", nil)
 	req.Header.Set("Authorization", "Bearer "+validBearerToken(t, svc))
 	rec := httptest.NewRecorder()
 
@@ -82,7 +82,7 @@ func TestAuthMiddleware_ValidToken_StoresClaimsInContext(t *testing.T) {
 	})
 	handler := AuthMiddleware(svc)(capture)
 
-	req := httptest.NewRequest(http.MethodGet, "/properties", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/properties", nil)
 	req.Header.Set("Authorization", "Bearer "+validBearerToken(t, svc))
 	handler.ServeHTTP(httptest.NewRecorder(), req)
 
@@ -93,7 +93,7 @@ func TestAuthMiddleware_ValidToken_StoresClaimsInContext(t *testing.T) {
 func TestAuthMiddleware_MissingHeader_Returns401(t *testing.T) {
 	handler := AuthMiddleware(newMiddlewareAuthService(t))(okHandler)
 
-	req := httptest.NewRequest(http.MethodGet, "/properties", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/properties", nil)
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -104,7 +104,7 @@ func TestAuthMiddleware_MissingHeader_Returns401(t *testing.T) {
 func TestAuthMiddleware_InvalidToken_Returns401(t *testing.T) {
 	handler := AuthMiddleware(newMiddlewareAuthService(t))(okHandler)
 
-	req := httptest.NewRequest(http.MethodGet, "/properties", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/properties", nil)
 	req.Header.Set("Authorization", "Bearer not.a.real.token")
 	rec := httptest.NewRecorder()
 
@@ -117,7 +117,7 @@ func TestAuthMiddleware_AuthPathsExempt(t *testing.T) {
 	handler := AuthMiddleware(newMiddlewareAuthService(t))(okHandler)
 
 	for _, path := range []string{"/auth/login", "/auth/refresh", "/auth/logout"} {
-		req := httptest.NewRequest(http.MethodPost, path, nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, path, nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		assert.Equal(t, http.StatusOK, rec.Code, "path %s should be exempt", path)
@@ -127,7 +127,7 @@ func TestAuthMiddleware_AuthPathsExempt(t *testing.T) {
 func TestAuthMiddleware_HealthExempt(t *testing.T) {
 	handler := AuthMiddleware(newMiddlewareAuthService(t))(okHandler)
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -141,7 +141,7 @@ func TestLoggingMiddleware_SetsCORSHeaders(t *testing.T) {
 	origin := "https://example.com"
 	handler := LoggingMiddleware([]string{origin})(okHandler)
 
-	req := httptest.NewRequest(http.MethodGet, "/properties", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/properties", nil)
 	req.Header.Set("Origin", origin)
 	rec := httptest.NewRecorder()
 
@@ -155,7 +155,7 @@ func TestLoggingMiddleware_OptionsReturns204(t *testing.T) {
 	origin := "https://example.com"
 	handler := LoggingMiddleware([]string{origin})(okHandler)
 
-	req := httptest.NewRequest(http.MethodOptions, "/properties", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodOptions, "/properties", nil)
 	req.Header.Set("Origin", origin)
 	rec := httptest.NewRecorder()
 
@@ -167,7 +167,7 @@ func TestLoggingMiddleware_OptionsReturns204(t *testing.T) {
 func TestLoggingMiddleware_NoCORSWhenOriginNotAllowed(t *testing.T) {
 	handler := LoggingMiddleware([]string{"https://example.com"})(okHandler)
 
-	req := httptest.NewRequest(http.MethodGet, "/properties", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/properties", nil)
 	req.Header.Set("Origin", "https://evil.com")
 	rec := httptest.NewRecorder()
 

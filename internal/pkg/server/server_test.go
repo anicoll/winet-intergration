@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"iter"
@@ -34,7 +35,7 @@ func postJSON(t *testing.T, body any) *http.Request {
 	t.Helper()
 	b, err := json.Marshal(body)
 	require.NoError(t, err)
-	r := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(b))
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewReader(b))
 	r.Header.Set("Content-Type", "application/json")
 	return r
 }
@@ -152,7 +153,7 @@ func TestPostInverterState_Off(t *testing.T) {
 	svc := newTestServer(w, servermocks.NewDatabase(t))
 
 	rec := httptest.NewRecorder()
-	svc.PostInverterState(rec, httptest.NewRequest(http.MethodPost, "/", nil), string(api.Off))
+	svc.PostInverterState(rec, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil), string(api.Off))
 
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
@@ -163,7 +164,7 @@ func TestPostInverterState_On(t *testing.T) {
 	svc := newTestServer(w, servermocks.NewDatabase(t))
 
 	rec := httptest.NewRecorder()
-	svc.PostInverterState(rec, httptest.NewRequest(http.MethodPost, "/", nil), string(api.On))
+	svc.PostInverterState(rec, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil), string(api.On))
 
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
@@ -180,7 +181,7 @@ func TestGetProperties_ReturnsJSON(t *testing.T) {
 	svc := newTestServer(servermocks.NewWinetService(t), db)
 
 	rec := httptest.NewRecorder()
-	svc.GetProperties(rec, httptest.NewRequest(http.MethodGet, "/properties", nil))
+	svc.GetProperties(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/properties", nil))
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
@@ -196,7 +197,7 @@ func TestGetProperties_DBError_Returns500(t *testing.T) {
 	svc := newTestServer(servermocks.NewWinetService(t), db)
 
 	rec := httptest.NewRecorder()
-	svc.GetProperties(rec, httptest.NewRequest(http.MethodGet, "/properties", nil))
+	svc.GetProperties(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/properties", nil))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -242,7 +243,7 @@ func TestPostAuthLogin_Success(t *testing.T) {
 
 	body, _ := json.Marshal(api.LoginRequest{Username: authTestUsername, Password: authTestPassword})
 	rec := httptest.NewRecorder()
-	svc.PostAuthLogin(rec, httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body)))
+	svc.PostAuthLogin(rec, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/login", bytes.NewReader(body)))
 
 	require.Equal(t, http.StatusOK, rec.Code)
 
@@ -268,7 +269,7 @@ func TestPostAuthLogin_InvalidCredentials_Returns401(t *testing.T) {
 
 	body, _ := json.Marshal(api.LoginRequest{Username: authTestUsername, Password: "wrong-password-xyz"})
 	rec := httptest.NewRecorder()
-	svc.PostAuthLogin(rec, httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body)))
+	svc.PostAuthLogin(rec, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/login", bytes.NewReader(body)))
 
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
@@ -277,7 +278,7 @@ func TestPostAuthLogin_BadJSON_Returns400(t *testing.T) {
 	svc := newAuthTestServer(t)
 
 	rec := httptest.NewRecorder()
-	svc.PostAuthLogin(rec, httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader([]byte("not-json"))))
+	svc.PostAuthLogin(rec, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/login", bytes.NewReader([]byte("not-json"))))
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -290,7 +291,7 @@ func TestPostAuthRefresh_Success(t *testing.T) {
 	// Login first to get a refresh cookie.
 	body, _ := json.Marshal(api.LoginRequest{Username: authTestUsername, Password: authTestPassword})
 	loginRec := httptest.NewRecorder()
-	svc.PostAuthLogin(loginRec, httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body)))
+	svc.PostAuthLogin(loginRec, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/login", bytes.NewReader(body)))
 	require.Equal(t, http.StatusOK, loginRec.Code)
 
 	var refreshCookie *http.Cookie
@@ -302,7 +303,7 @@ func TestPostAuthRefresh_Success(t *testing.T) {
 	require.NotNil(t, refreshCookie)
 
 	// Use the cookie to refresh.
-	refreshReq := httptest.NewRequest(http.MethodPost, "/auth/refresh", nil)
+	refreshReq := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/refresh", nil)
 	refreshReq.AddCookie(refreshCookie)
 	refreshRec := httptest.NewRecorder()
 	svc.PostAuthRefresh(refreshRec, refreshReq)
@@ -317,7 +318,7 @@ func TestPostAuthRefresh_NoCookie_Returns401(t *testing.T) {
 	svc := newAuthTestServer(t)
 
 	rec := httptest.NewRecorder()
-	svc.PostAuthRefresh(rec, httptest.NewRequest(http.MethodPost, "/auth/refresh", nil))
+	svc.PostAuthRefresh(rec, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/refresh", nil))
 
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
@@ -325,7 +326,7 @@ func TestPostAuthRefresh_NoCookie_Returns401(t *testing.T) {
 func TestPostAuthRefresh_InvalidCookieValue_Returns401(t *testing.T) {
 	svc := newAuthTestServer(t)
 
-	req := httptest.NewRequest(http.MethodPost, "/auth/refresh", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/refresh", nil)
 	req.AddCookie(&http.Cookie{Name: refreshCookieName, Value: "not-a-real-token"})
 	rec := httptest.NewRecorder()
 
@@ -342,7 +343,7 @@ func TestPostAuthLogout_WithCookie_Returns204AndClearsCookie(t *testing.T) {
 	// Login to get a refresh token.
 	body, _ := json.Marshal(api.LoginRequest{Username: authTestUsername, Password: authTestPassword})
 	loginRec := httptest.NewRecorder()
-	svc.PostAuthLogin(loginRec, httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body)))
+	svc.PostAuthLogin(loginRec, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/login", bytes.NewReader(body)))
 	require.Equal(t, http.StatusOK, loginRec.Code)
 
 	var refreshCookie *http.Cookie
@@ -354,7 +355,7 @@ func TestPostAuthLogout_WithCookie_Returns204AndClearsCookie(t *testing.T) {
 	require.NotNil(t, refreshCookie)
 
 	// Logout.
-	logoutReq := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
+	logoutReq := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/logout", nil)
 	logoutReq.AddCookie(refreshCookie)
 	logoutRec := httptest.NewRecorder()
 	svc.PostAuthLogout(logoutRec, logoutReq)
@@ -375,7 +376,7 @@ func TestPostAuthLogout_RevokesRefreshToken(t *testing.T) {
 	// Login.
 	body, _ := json.Marshal(api.LoginRequest{Username: authTestUsername, Password: authTestPassword})
 	loginRec := httptest.NewRecorder()
-	svc.PostAuthLogin(loginRec, httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body)))
+	svc.PostAuthLogin(loginRec, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/login", bytes.NewReader(body)))
 	require.Equal(t, http.StatusOK, loginRec.Code)
 
 	var refreshCookie *http.Cookie
@@ -387,12 +388,12 @@ func TestPostAuthLogout_RevokesRefreshToken(t *testing.T) {
 	require.NotNil(t, refreshCookie)
 
 	// Logout.
-	logoutReq := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
+	logoutReq := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/logout", nil)
 	logoutReq.AddCookie(refreshCookie)
 	svc.PostAuthLogout(httptest.NewRecorder(), logoutReq)
 
 	// Refresh with the same cookie should now fail.
-	refreshReq := httptest.NewRequest(http.MethodPost, "/auth/refresh", nil)
+	refreshReq := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/refresh", nil)
 	refreshReq.AddCookie(refreshCookie)
 	refreshRec := httptest.NewRecorder()
 	svc.PostAuthRefresh(refreshRec, refreshReq)
@@ -404,7 +405,7 @@ func TestPostAuthLogout_NoCookie_Returns204(t *testing.T) {
 	svc := newAuthTestServer(t)
 
 	rec := httptest.NewRecorder()
-	svc.PostAuthLogout(rec, httptest.NewRequest(http.MethodPost, "/auth/logout", nil))
+	svc.PostAuthLogout(rec, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/logout", nil))
 
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
@@ -435,7 +436,7 @@ func TestGetAmberUsageFromTo_ReturnsJSON(t *testing.T) {
 	from := now.Add(-time.Hour)
 	to := now
 	rec := httptest.NewRecorder()
-	svc.GetAmberUsageFromTo(rec, httptest.NewRequest(http.MethodGet, "/amber/usage/from/to", nil), from, to, api.GetAmberUsageFromToParams{})
+	svc.GetAmberUsageFromTo(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/amber/usage/from/to", nil), from, to, api.GetAmberUsageFromToParams{})
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
@@ -458,7 +459,7 @@ func TestGetAmberUsageFromTo_EmptyResult_ReturnsEmptyArray(t *testing.T) {
 
 	now := time.Now().UTC()
 	rec := httptest.NewRecorder()
-	svc.GetAmberUsageFromTo(rec, httptest.NewRequest(http.MethodGet, "/amber/usage/from/to", nil), now.Add(-time.Hour), now, api.GetAmberUsageFromToParams{})
+	svc.GetAmberUsageFromTo(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/amber/usage/from/to", nil), now.Add(-time.Hour), now, api.GetAmberUsageFromToParams{})
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	var got []api.AmberUsage
@@ -473,7 +474,7 @@ func TestGetAmberUsageFromTo_DBError_Returns500(t *testing.T) {
 
 	now := time.Now().UTC()
 	rec := httptest.NewRecorder()
-	svc.GetAmberUsageFromTo(rec, httptest.NewRequest(http.MethodGet, "/amber/usage/from/to", nil), now.Add(-time.Hour), now, api.GetAmberUsageFromToParams{})
+	svc.GetAmberUsageFromTo(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/amber/usage/from/to", nil), now.Add(-time.Hour), now, api.GetAmberUsageFromToParams{})
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }

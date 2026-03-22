@@ -31,7 +31,7 @@ func (d *Database) Write(ctx context.Context, data []publisher.DataPoint) error 
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	qtx := d.queries.WithTx(tx)
 	for _, dp := range data {
@@ -61,7 +61,7 @@ func (d *Database) WriteAmberUsage(ctx context.Context, usage []dbq.Amberusage) 
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	qtx := d.queries.WithTx(tx)
 	for _, u := range usage {
@@ -88,7 +88,7 @@ func (d *Database) WriteAmberPrices(ctx context.Context, prices []dbq.Amberprice
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	qtx := d.queries.WithTx(tx)
 	for _, price := range prices {

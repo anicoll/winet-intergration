@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/anicoll/winet-integration/internal/pkg/model"
 	ws "github.com/anicoll/winet-integration/pkg/sockets"
-	"go.uber.org/zap"
 )
 
 // handle a message to force self consumption

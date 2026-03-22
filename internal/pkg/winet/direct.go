@@ -39,7 +39,7 @@ func (s *service) handleDirectMessage(data []byte) {
 		}
 		datapoints = append(datapoints, model.DeviceStatus{
 			Name:  nameV,
-			Slug:  strings.Replace(slug.Make(nameV), "-", "_", -1),
+			Slug:  strings.ReplaceAll(slug.Make(nameV), "-", "_"),
 			Value: valueV,
 			Unit:  string(unit.VoltageUnit),
 			Dirty: true,
@@ -51,7 +51,7 @@ func (s *service) handleDirectMessage(data []byte) {
 		}
 		datapoints = append(datapoints, model.DeviceStatus{
 			Name:  nameA,
-			Slug:  strings.Replace(slug.Make(nameA), "-", "_", -1),
+			Slug:  strings.ReplaceAll(slug.Make(nameA), "-", "_"),
 			Value: valueA,
 			Unit:  string(unit.CurrentUnit),
 			Dirty: true,
@@ -75,7 +75,7 @@ func (s *service) handleDirectMessage(data []byte) {
 		}
 		datapoints = append(datapoints, model.DeviceStatus{
 			Name:  nameW,
-			Slug:  strings.Replace(slug.Make(nameW), "-", "_", -1),
+			Slug:  strings.ReplaceAll(slug.Make(nameW), "-", "_"),
 			Value: valueW,
 			Unit:  "W", // was incorrectly using CurrentUnit before
 			Dirty: true,

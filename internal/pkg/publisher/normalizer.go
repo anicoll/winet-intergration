@@ -20,7 +20,7 @@ func (Normalizer) Normalize(device model.Device, status model.DeviceStatus) (Dat
 		return DataPoint{}, true
 	}
 
-	slugIdentifier := fmt.Sprintf("%s_%s", strings.Replace(device.Model, ".", "", -1), device.SerialNumber)
+	slugIdentifier := fmt.Sprintf("%s_%s", strings.ReplaceAll(device.Model, ".", ""), device.SerialNumber)
 	isTextSensor := model.TextSensors.HasSlug(status.Slug)
 
 	var val string
