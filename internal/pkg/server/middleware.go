@@ -22,16 +22,20 @@ func ClaimsFromContext(ctx context.Context) (*auth.Claims, bool) {
 	return c, ok
 }
 
-func LoggingMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
+func LoggingMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 	logger := zap.L()
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			logger.Info(r.RequestURI)
-			if allowedOrigin != "" {
-				w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
-				w.Header().Set("Access-Control-Allow-Credentials", "true")
-				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			origin := r.Header.Get("Origin")
+			for _, allowed := range allowedOrigins {
+				if origin == allowed {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					w.Header().Set("Access-Control-Allow-Credentials", "true")
+					w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+					break
+				}
 			}
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)

@@ -16,7 +16,7 @@ type Config struct {
 	DBDSN            string `env:"DATABASE_URL,required"`
 	MigrationsFolder string `env:"MIGRATIONS_FOLDER"  envDefault:"migrations"`
 	Timezone         string `env:"TIMEZONE"           envDefault:"Australia/Adelaide"`
-	AllowedOrigin    string `env:"ALLOWED_ORIGIN,required"`
+	AllowedOrigins   []string `env:"ALLOWED_ORIGIN,required" envSeparator:","`
 }
 
 // Load parses configuration from environment variables.

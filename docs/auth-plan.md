@@ -8,7 +8,7 @@
 | B2  | `feat/auth-core`           | **Done** | Auth service, middleware, OpenAPI, CORS wired, tests added                                                                  |
 | B3  | `feat/auth-createuser-cmd` | **Done** | `cmd/createuser/main.go`                                                                                                    |
 | F1  | `feat/auth-context`        | **Done** | `src/lib/auth.ts`, `src/context/AuthContext.tsx`, `src/pages/Login.tsx`, `src/components/ProtectedRoute.tsx`, `src/App.tsx` |
-| F2  | `feat/auth-api`            | Pending  |                                                                                                                             |
+| F2  | `feat/auth-api`            | **Done** | `src/lib/api.ts` (factory), `src/context/AuthContext.tsx` (exposes client), `src/hooks/useProperties.ts`, `src/hooks/usePrices.ts` |
 
 ---
 
