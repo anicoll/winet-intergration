@@ -56,6 +56,33 @@ func (d *Database) RegisterDevice(ctx context.Context, device *model.Device) err
 	})
 }
 
+func (d *Database) WriteAmberUsage(ctx context.Context, usage []dbq.Amberusage) error {
+	tx, err := d.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := d.queries.WithTx(tx)
+	for _, u := range usage {
+		if err := qtx.UpsertAmberUsage(ctx, dbq.UpsertAmberUsageParams{
+			PerKwh:            u.PerKwh,
+			SpotPerKwh:        u.SpotPerKwh,
+			StartTime:         u.StartTime,
+			EndTime:           u.EndTime,
+			Duration:          u.Duration,
+			ChannelType:       u.ChannelType,
+			ChannelIdentifier: u.ChannelIdentifier,
+			Kwh:               u.Kwh,
+			Quality:           u.Quality,
+			Cost:              u.Cost,
+		}); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
 func (d *Database) WriteAmberPrices(ctx context.Context, prices []dbq.Amberprice) error {
 	tx, err := d.pool.Begin(ctx)
 	if err != nil {

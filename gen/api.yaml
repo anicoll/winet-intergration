@@ -53,6 +53,36 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Property"
+  /amber/usage/{from}/{to}:
+    get:
+      parameters:
+        - name: site
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: from
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date-time
+            example: "2023-10-01T12:00:00Z"
+        - name: to
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: returns amber usage data.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AmberUsage"
   /amber/prices/{from}/{to}:
     get:
       parameters:
@@ -238,6 +268,72 @@ components:
         disable:
           type: boolean
           example: true
+    AmberUsage:
+      type: object
+      required:
+        - id
+        - duration
+        - channelType
+        - channelIdentifier
+        - kwh
+        - quality
+        - cost
+        - createdAt
+        - updatedAt
+        - endTime
+        - startTime
+        - spotPerKwh
+        - perKwh
+      properties:
+        id:
+          type: integer
+          example: 1
+        duration:
+          type: integer
+          example: 30
+          description: duration in minutes
+        channelType:
+          type: string
+          example: "general"
+        channelIdentifier:
+          type: string
+          example: "E1"
+        kwh:
+          type: number
+          example: 1.234
+          description: kWh consumed or generated (negative for generation)
+        quality:
+          type: string
+          example: "billable"
+          enum:
+            - billable
+            - estimated
+        cost:
+          type: number
+          example: 0.30
+          description: total cost including GST
+        createdAt:
+          type: string
+          format: date-time
+          example: "2023-10-01T12:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2023-10-01T12:00:00Z"
+        endTime:
+          type: string
+          format: date-time
+          example: "2023-10-01T12:00:00Z"
+        startTime:
+          type: string
+          format: date-time
+          example: "2023-10-01T12:00:00Z"
+        perKwh:
+          type: number
+          example: 0.1234
+        spotPerKwh:
+          type: number
+          example: 0.1234
     AmberPrice:
       type: object
       required:

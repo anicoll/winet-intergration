@@ -33,6 +33,7 @@ type Database interface {
 	GetLatestProperties(ctx context.Context) (iter.Seq[dbpkg.Property], error)
 	GetProperties(ctx context.Context, identifier, slug string, from, to *time.Time) ([]dbpkg.Property, error)
 	GetAmberPrices(ctx context.Context, from, to time.Time, site *string) ([]dbpkg.Amberprice, error)
+	GetAmberUsage(ctx context.Context, from, to time.Time) ([]dbpkg.Amberusage, error)
 }
 
 type server struct {
@@ -80,6 +81,38 @@ func unmarshalPayload[T any](r *http.Request) (*T, error) {
 		return nil, &clientError{err}
 	}
 	return &out, nil
+}
+
+func (s *server) GetAmberUsageFromTo(w http.ResponseWriter, r *http.Request, from time.Time, to time.Time, params api.GetAmberUsageFromToParams) {
+	ctx := r.Context()
+	usage, err := s.db.GetAmberUsage(ctx, from.In(s.loc), to.In(s.loc))
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	res := []api.AmberUsage{}
+	for _, u := range usage {
+		res = append(res, api.AmberUsage{
+			Id:                u.ID,
+			PerKwh:            float32(u.PerKwh),
+			SpotPerKwh:        float32(u.SpotPerKwh),
+			StartTime:         u.StartTime,
+			EndTime:           u.EndTime,
+			Duration:          u.Duration,
+			ChannelType:       u.ChannelType,
+			ChannelIdentifier: u.ChannelIdentifier,
+			Kwh:               float32(u.Kwh),
+			Quality:           api.AmberUsageQuality(u.Quality),
+			Cost:              float32(u.Cost),
+			CreatedAt:         u.CreatedAt.Time,
+			UpdatedAt:         u.UpdatedAt.Time,
+		})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(res); err != nil {
+		handleError(w, err)
+		return
+	}
 }
 
 func (s *server) GetAmberPricesFromTo(w http.ResponseWriter, r *http.Request, from time.Time, to time.Time, params api.GetAmberPricesFromToParams) {

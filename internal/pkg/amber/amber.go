@@ -11,6 +11,7 @@ import (
 
 	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
 	ac "github.com/anicoll/winet-integration/pkg/amber"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"go.uber.org/zap"
 )
 
@@ -70,6 +71,36 @@ func New(ctx context.Context, server, token string) (*client, error) {
 
 func (c *client) GetSites() []ac.Site {
 	return c.sites
+}
+
+func (c *client) GetUsage(ctx context.Context, siteID string, startDate, endDate openapi_types.Date) ([]dbpkg.Amberusage, error) {
+	response, err := c.aClient.GetUsageWithResponse(ctx, siteID, &ac.GetUsageParams{
+		StartDate: startDate,
+		EndDate:   endDate,
+	}, withToken(c.apiToken))
+	if err != nil {
+		return nil, err
+	}
+
+	res := []dbpkg.Amberusage{}
+	if response.JSON200 == nil {
+		return res, nil
+	}
+	for _, usage := range *response.JSON200 {
+		res = append(res, dbpkg.Amberusage{
+			PerKwh:            float64(usage.PerKwh),
+			SpotPerKwh:        float64(usage.SpotPerKwh),
+			StartTime:         usage.StartTime.In(c.loc),
+			EndTime:           usage.EndTime.In(c.loc),
+			Duration:          int(usage.Duration),
+			ChannelType:       string(usage.ChannelType),
+			ChannelIdentifier: usage.ChannelIdentifier,
+			Kwh:               float64(usage.Kwh),
+			Quality:           string(usage.Quality),
+			Cost:              float64(usage.Cost),
+		})
+	}
+	return res, nil
 }
 
 func (c *client) GetPrices(ctx context.Context, siteID string) ([]dbpkg.Amberprice, error) {

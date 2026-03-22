@@ -17,6 +17,7 @@ import (
 	paho_mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/jackc/pgx/v5/pgxpool"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -37,6 +38,14 @@ import (
 
 var errCron = errors.New("cron error")
 
+type AmberUsageFetcher interface {
+	GetUsage(ctx context.Context, siteID string, startDate, endDate openapi_types.Date) ([]dbpkg.Amberusage, error)
+}
+
+type AmberUsageWriter interface {
+	WriteAmberUsage(ctx context.Context, usage []dbpkg.Amberusage) error
+}
+
 const (
 	// Server configuration
 	serverAddr         = "0.0.0.0:8000"
@@ -49,6 +58,7 @@ const (
 	// Cron schedules
 	dbCleanupSchedule   = "CRON_TZ=Australia/Adelaide 0 3 * * *"
 	priceUpdateSchedule = "CRON_TZ=Australia/Adelaide */5 * * * *"
+	usageUpdateSchedule = "CRON_TZ=Australia/Adelaide 0 8 * * *"
 
 	// Delays
 	priceUpdateDelay = 5 * time.Second
@@ -133,6 +143,11 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	// Start amber price processing service
 	eg.Go(func() error {
 		return startAmberPriceService(ctx, &cfg.AmberCfg, db, errorChan, logger)
+	})
+
+	// Start amber usage processing service
+	eg.Go(func() error {
+		return startAmberUsageService(ctx, &cfg.AmberCfg, db, errorChan, logger)
 	})
 
 	// Start winet service with retry logic
@@ -276,6 +291,70 @@ func startAmberPriceService(ctx context.Context, amberCfg *config.AmberConfig, d
 	c.Stop()
 	logger.Info("Amber price service stopped")
 	return ctx.Err()
+}
+
+func startAmberUsageService(ctx context.Context, amberCfg *config.AmberConfig, db *database.Database, errChan chan error, logger *zap.Logger) error {
+	logger.Info("Starting amber usage service")
+
+	if amberCfg == nil || amberCfg.Host == "" || amberCfg.Token == "" {
+		return errors.New("amber host and token are required")
+	}
+
+	svc, err := amber.New(ctx, amberCfg.Host, amberCfg.Token)
+	if err != nil {
+		return fmt.Errorf("failed to create amber service: %w", err)
+	}
+
+	sites := svc.GetSites()
+	if len(sites) == 0 {
+		return errors.New("no amber sites available")
+	}
+	site := sites[0]
+
+	// Initial usage fetch
+	if err := fetchAndStoreUsage(ctx, svc, db, site.Id); err != nil {
+		logger.Warn("initial usage fetch failed", zap.Error(err))
+	}
+
+	c := cron.New()
+	if _, err := c.AddFunc(usageUpdateSchedule, func() {
+		if err := fetchAndStoreUsage(context.Background(), svc, db, site.Id); err != nil {
+			logger.Error("amber usage update failed", zap.Error(err))
+			select {
+			case errChan <- fmt.Errorf("%w: %v", errCron, err):
+			default:
+				logger.Warn("error channel full, dropping error")
+			}
+			return
+		}
+		logger.Info("amber usage updated")
+	}); err != nil {
+		return fmt.Errorf("failed to schedule amber usage updates: %w", err)
+	}
+
+	c.Start()
+
+	<-ctx.Done()
+	c.Stop()
+	logger.Info("Amber usage service stopped")
+	return ctx.Err()
+}
+
+func fetchAndStoreUsage(ctx context.Context, svc AmberUsageFetcher, db AmberUsageWriter, siteId string) error {
+	now := time.Now()
+	startDate := openapi_types.Date{Time: now.AddDate(0, 0, -7)}
+	endDate := openapi_types.Date{Time: now.AddDate(0, 0, -1)}
+
+	usage, err := svc.GetUsage(ctx, siteId, startDate, endDate)
+	if err != nil {
+		return fmt.Errorf("failed to get usage: %w", err)
+	}
+
+	if err := db.WriteAmberUsage(ctx, usage); err != nil {
+		return fmt.Errorf("failed to write usage to database: %w", err)
+	}
+
+	return nil
 }
 
 func fetchAndStorePrices(ctx context.Context, svc interface {
