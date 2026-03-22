@@ -10,6 +10,22 @@ import (
 	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 )
 
+func (d *Database) StoreRefreshToken(ctx context.Context, arg dbq.StoreRefreshTokenParams) error {
+	return d.queries.StoreRefreshToken(ctx, arg)
+}
+
+func (d *Database) GetRefreshToken(ctx context.Context, tokenHash string) (dbq.RefreshToken, error) {
+	return d.queries.GetRefreshToken(ctx, tokenHash)
+}
+
+func (d *Database) DeleteRefreshToken(ctx context.Context, tokenHash string) error {
+	return d.queries.DeleteRefreshToken(ctx, tokenHash)
+}
+
+func (d *Database) DeleteExpiredRefreshTokens(ctx context.Context) error {
+	return d.queries.DeleteExpiredRefreshTokens(ctx)
+}
+
 func (d *Database) Write(ctx context.Context, data []publisher.DataPoint) error {
 	tx, err := d.pool.Begin(ctx)
 	if err != nil {

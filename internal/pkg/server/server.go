@@ -240,7 +240,7 @@ func (s *server) PostAuthRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := s.authSvc.Refresh(cookie.Value)
+	accessToken, err := s.authSvc.Refresh(r.Context(), cookie.Value)
 	if err != nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -252,7 +252,7 @@ func (s *server) PostAuthRefresh(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) PostAuthLogout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(refreshCookieName); err == nil {
-		s.authSvc.Logout(cookie.Value)
+		s.authSvc.Logout(r.Context(), cookie.Value)
 	}
 
 	http.SetCookie(w, &http.Cookie{

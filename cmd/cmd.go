@@ -113,7 +113,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	pub := publisher.NewMultiPublisher(db, mqttPublisher)
 
-	authSvc := auth.NewService(cfg.AuthCfg.JWTSecret, cfg.AuthCfg.AccessTokenTTL, cfg.AuthCfg.RefreshTokenTTL, db)
+	authSvc := auth.NewService(cfg.AuthCfg.JWTSecret, cfg.AuthCfg.AccessTokenTTL, cfg.AuthCfg.RefreshTokenTTL, db, db)
 	authSvc.StartCleanup(ctx, time.Hour)
 
 	errorChan := make(chan error, errorChannelBuffer)
@@ -418,6 +418,15 @@ func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db *data
 
 	mux := http.NewServeMux()
 	mux.Handle("/", apiHandler)
+	mux.HandleFunc("OPTIONS /", func(w http.ResponseWriter, r *http.Request) {
+		if allowedOrigin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"status":%q}`, health.get())

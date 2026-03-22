@@ -36,20 +36,29 @@ type UserStore interface {
 	GetUserByUsername(ctx context.Context, username string) (dbpkg.User, error)
 }
 
+type TokenStore interface {
+	StoreRefreshToken(ctx context.Context, arg dbpkg.StoreRefreshTokenParams) error
+	GetRefreshToken(ctx context.Context, tokenHash string) (dbpkg.RefreshToken, error)
+	DeleteRefreshToken(ctx context.Context, tokenHash string) error
+	DeleteExpiredRefreshTokens(ctx context.Context) error
+}
+
 type Service struct {
 	secret          []byte
 	accessTokenTTL  time.Duration
 	refreshTokenTTL time.Duration
-	tokens          sync.Map // sha256(rawToken) hex → tokenRecord
+	tokens          sync.Map // sha256(rawToken) hex → tokenRecord (cache)
 	db              UserStore
+	tokenDB         TokenStore
 }
 
-func NewService(secret string, accessTTL, refreshTTL time.Duration, db UserStore) *Service {
+func NewService(secret string, accessTTL, refreshTTL time.Duration, db UserStore, tokenDB TokenStore) *Service {
 	return &Service{
 		secret:          []byte(secret),
 		accessTokenTTL:  accessTTL,
 		refreshTokenTTL: refreshTTL,
 		db:              db,
+		tokenDB:         tokenDB,
 	}
 }
 
@@ -73,6 +82,7 @@ func (s *Service) StartCleanup(ctx context.Context, interval time.Duration) {
 					}
 					return true
 				})
+				_ = s.tokenDB.DeleteExpiredRefreshTokens(ctx)
 			}
 		}
 	}()
@@ -98,33 +108,62 @@ func (s *Service) Login(ctx context.Context, username, password string) (accessT
 		return "", "", fmt.Errorf("generate refresh token: %w", err)
 	}
 
-	s.tokens.Store(hashToken(refreshToken), tokenRecord{
+	expiresAt := time.Now().Add(s.refreshTokenTTL)
+	key := hashToken(refreshToken)
+
+	s.tokens.Store(key, tokenRecord{
 		userID:    user.ID,
 		username:  user.Username,
-		expiresAt: time.Now().Add(s.refreshTokenTTL),
+		expiresAt: expiresAt,
+	})
+	_ = s.tokenDB.StoreRefreshToken(ctx, dbpkg.StoreRefreshTokenParams{
+		TokenHash: key,
+		UserID:    user.ID,
+		Username:  user.Username,
+		ExpiresAt: expiresAt,
 	})
 
 	return accessToken, refreshToken, nil
 }
 
-func (s *Service) Refresh(rawRefreshToken string) (string, error) {
+func (s *Service) Refresh(ctx context.Context, rawRefreshToken string) (string, error) {
 	key := hashToken(rawRefreshToken)
-	val, ok := s.tokens.Load(key)
-	if !ok {
+
+	// Fast path: in-memory cache.
+	if val, ok := s.tokens.Load(key); ok {
+		rec := val.(tokenRecord)
+		if time.Now().After(rec.expiresAt) {
+			s.tokens.Delete(key)
+			_ = s.tokenDB.DeleteRefreshToken(ctx, key)
+			return "", ErrInvalidToken
+		}
+		return s.issueAccessToken(rec.userID, rec.username)
+	}
+
+	// Slow path: DB (e.g. after a restart).
+	dbTok, err := s.tokenDB.GetRefreshToken(ctx, key)
+	if err != nil {
+		return "", ErrInvalidToken
+	}
+	if time.Now().After(dbTok.ExpiresAt) {
+		_ = s.tokenDB.DeleteRefreshToken(ctx, key)
 		return "", ErrInvalidToken
 	}
 
-	rec := val.(tokenRecord)
-	if time.Now().After(rec.expiresAt) {
-		s.tokens.Delete(key)
-		return "", ErrInvalidToken
-	}
+	// Re-populate cache from DB.
+	s.tokens.Store(key, tokenRecord{
+		userID:    dbTok.UserID,
+		username:  dbTok.Username,
+		expiresAt: dbTok.ExpiresAt,
+	})
 
-	return s.issueAccessToken(rec.userID, rec.username)
+	return s.issueAccessToken(dbTok.UserID, dbTok.Username)
 }
 
-func (s *Service) Logout(rawRefreshToken string) {
-	s.tokens.Delete(hashToken(rawRefreshToken))
+func (s *Service) Logout(ctx context.Context, rawRefreshToken string) {
+	key := hashToken(rawRefreshToken)
+	s.tokens.Delete(key)
+	_ = s.tokenDB.DeleteRefreshToken(ctx, key)
 }
 
 func (s *Service) ValidateAccessToken(tokenStr string) (*Claims, error) {

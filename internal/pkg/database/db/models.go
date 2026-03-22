@@ -56,3 +56,11 @@ type User struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
+
+type RefreshToken struct {
+	TokenHash string    `json:"token_hash"`
+	UserID    int       `json:"user_id"`
+	Username  string    `json:"username"`
+	ExpiresAt time.Time `json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
+}
