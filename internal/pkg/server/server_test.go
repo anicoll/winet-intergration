@@ -409,6 +409,75 @@ func TestPostAuthLogout_NoCookie_Returns204(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
 
+// --- GetAmberUsageFromTo ---
+
+func TestGetAmberUsageFromTo_ReturnsJSON(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	usage := []dbpkg.Amberusage{
+		{
+			ID:                1,
+			PerKwh:            24.5,
+			SpotPerKwh:        6.1,
+			StartTime:         now.Add(-30 * time.Minute),
+			EndTime:           now,
+			Duration:          30,
+			ChannelType:       "general",
+			ChannelIdentifier: "E1",
+			Kwh:               1.234,
+			Quality:           "billable",
+			Cost:              0.30,
+		},
+	}
+	db := servermocks.NewDatabase(t)
+	db.EXPECT().GetAmberUsage(mock.Anything, mock.Anything, mock.Anything).Return(usage, nil)
+	svc := newTestServer(servermocks.NewWinetService(t), db)
+
+	from := now.Add(-time.Hour)
+	to := now
+	rec := httptest.NewRecorder()
+	svc.GetAmberUsageFromTo(rec, httptest.NewRequest(http.MethodGet, "/amber/usage/from/to", nil), from, to, api.GetAmberUsageFromToParams{})
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+
+	var got []api.AmberUsage
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+	require.Len(t, got, 1)
+	assert.Equal(t, 1, got[0].Id)
+	assert.Equal(t, "E1", got[0].ChannelIdentifier)
+	assert.Equal(t, "general", got[0].ChannelType)
+	assert.Equal(t, float32(1.234), got[0].Kwh)
+	assert.Equal(t, api.Billable, got[0].Quality)
+	assert.Equal(t, float32(0.30), got[0].Cost)
+}
+
+func TestGetAmberUsageFromTo_EmptyResult_ReturnsEmptyArray(t *testing.T) {
+	db := servermocks.NewDatabase(t)
+	db.EXPECT().GetAmberUsage(mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+	svc := newTestServer(servermocks.NewWinetService(t), db)
+
+	now := time.Now().UTC()
+	rec := httptest.NewRecorder()
+	svc.GetAmberUsageFromTo(rec, httptest.NewRequest(http.MethodGet, "/amber/usage/from/to", nil), now.Add(-time.Hour), now, api.GetAmberUsageFromToParams{})
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var got []api.AmberUsage
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+	assert.Empty(t, got)
+}
+
+func TestGetAmberUsageFromTo_DBError_Returns500(t *testing.T) {
+	db := servermocks.NewDatabase(t)
+	db.EXPECT().GetAmberUsage(mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("db connection lost"))
+	svc := newTestServer(servermocks.NewWinetService(t), db)
+
+	now := time.Now().UTC()
+	rec := httptest.NewRecorder()
+	svc.GetAmberUsageFromTo(rec, httptest.NewRequest(http.MethodGet, "/amber/usage/from/to", nil), now.Add(-time.Hour), now, api.GetAmberUsageFromToParams{})
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
 // Ensure the mocks satisfy the interfaces at compile time.
 var _ WinetService = (*servermocks.WinetService)(nil)
 var _ Database = (*servermocks.Database)(nil)

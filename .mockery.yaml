@@ -4,6 +4,12 @@ filename: "{{.InterfaceName}}.go"
 pkgname: mocks
 template: testify
 packages:
+  github.com/anicoll/winet-integration/cmd:
+    config:
+      dir: "mocks/cmd"
+    interfaces:
+      AmberUsageFetcher:
+      AmberUsageWriter:
   github.com/anicoll/winet-integration/pkg/sockets:
     config:
       dir: "mocks/sockets"

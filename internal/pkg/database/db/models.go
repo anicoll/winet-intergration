@@ -23,6 +23,22 @@ type Amberprice struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Amberusage struct {
+	ID                int                `json:"id"`
+	PerKwh            float64            `json:"per_kwh"`
+	SpotPerKwh        float64            `json:"spot_per_kwh"`
+	StartTime         time.Time          `json:"start_time"`
+	EndTime           time.Time          `json:"end_time"`
+	Duration          int                `json:"duration"`
+	ChannelType       string             `json:"channel_type"`
+	ChannelIdentifier string             `json:"channel_identifier"`
+	Kwh               float64            `json:"kwh"`
+	Quality           string             `json:"quality"`
+	Cost              float64            `json:"cost"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Device struct {
 	ID           string             `json:"id"`
 	Model        pgtype.Text        `json:"model"`
@@ -49,18 +65,18 @@ type Property struct {
 	Slug              string    `json:"slug"`
 }
 
+type RefreshToken struct {
+	TokenHash string             `json:"token_hash"`
+	UserID    int                `json:"user_id"`
+	Username  string             `json:"username"`
+	ExpiresAt time.Time          `json:"expires_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type User struct {
 	ID           int                `json:"id"`
 	Username     string             `json:"username"`
 	PasswordHash string             `json:"password_hash"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-}
-
-type RefreshToken struct {
-	TokenHash string    `json:"token_hash"`
-	UserID    int       `json:"user_id"`
-	Username  string    `json:"username"`
-	ExpiresAt time.Time `json:"expires_at"`
-	CreatedAt time.Time `json:"created_at"`
 }

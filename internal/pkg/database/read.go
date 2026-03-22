@@ -32,6 +32,13 @@ func (d *Database) GetLatestProperties(ctx context.Context) (iter.Seq[dbq.Proper
 	return slices.Values(properties), nil
 }
 
+func (d *Database) GetAmberUsage(ctx context.Context, from, to time.Time) ([]dbq.Amberusage, error) {
+	return d.queries.GetAmberUsage(ctx, dbq.GetAmberUsageParams{
+		StartTime:   from,
+		StartTime_2: to,
+	})
+}
+
 func (d *Database) GetAmberPrices(ctx context.Context, from, to time.Time, site *string) ([]dbq.Amberprice, error) {
 	return d.queries.GetAmberPrices(ctx, dbq.GetAmberPricesParams{
 		StartTime:   from,

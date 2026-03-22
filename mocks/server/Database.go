@@ -120,6 +120,80 @@ func (_c *Database_GetAmberPrices_Call) RunAndReturn(run func(ctx context.Contex
 	return _c
 }
 
+// GetAmberUsage provides a mock function for the type Database
+func (_mock *Database) GetAmberUsage(ctx context.Context, from time.Time, to time.Time) ([]db.Amberusage, error) {
+	ret := _mock.Called(ctx, from, to)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAmberUsage")
+	}
+
+	var r0 []db.Amberusage
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, time.Time) ([]db.Amberusage, error)); ok {
+		return returnFunc(ctx, from, to)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, time.Time) []db.Amberusage); ok {
+		r0 = returnFunc(ctx, from, to)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]db.Amberusage)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, time.Time, time.Time) error); ok {
+		r1 = returnFunc(ctx, from, to)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// Database_GetAmberUsage_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAmberUsage'
+type Database_GetAmberUsage_Call struct {
+	*mock.Call
+}
+
+// GetAmberUsage is a helper method to define mock.On call
+//   - ctx context.Context
+//   - from time.Time
+//   - to time.Time
+func (_e *Database_Expecter) GetAmberUsage(ctx interface{}, from interface{}, to interface{}) *Database_GetAmberUsage_Call {
+	return &Database_GetAmberUsage_Call{Call: _e.mock.On("GetAmberUsage", ctx, from, to)}
+}
+
+func (_c *Database_GetAmberUsage_Call) Run(run func(ctx context.Context, from time.Time, to time.Time)) *Database_GetAmberUsage_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 time.Time
+		if args[1] != nil {
+			arg1 = args[1].(time.Time)
+		}
+		var arg2 time.Time
+		if args[2] != nil {
+			arg2 = args[2].(time.Time)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *Database_GetAmberUsage_Call) Return(amberusages []db.Amberusage, err error) *Database_GetAmberUsage_Call {
+	_c.Call.Return(amberusages, err)
+	return _c
+}
+
+func (_c *Database_GetAmberUsage_Call) RunAndReturn(run func(ctx context.Context, from time.Time, to time.Time) ([]db.Amberusage, error)) *Database_GetAmberUsage_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetLatestProperties provides a mock function for the type Database
 func (_mock *Database) GetLatestProperties(ctx context.Context) (iter.Seq[db.Property], error) {
 	ret := _mock.Called(ctx)

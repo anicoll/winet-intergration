@@ -10,21 +10,21 @@ import (
 	"time"
 )
 
-const storeRefreshToken = `-- name: StoreRefreshToken :exec
-INSERT INTO refresh_tokens (token_hash, user_id, username, expires_at)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (token_hash) DO UPDATE SET expires_at = EXCLUDED.expires_at
+const deleteExpiredRefreshTokens = `-- name: DeleteExpiredRefreshTokens :exec
+DELETE FROM refresh_tokens WHERE expires_at < NOW()
 `
 
-type StoreRefreshTokenParams struct {
-	TokenHash string    `json:"token_hash"`
-	UserID    int       `json:"user_id"`
-	Username  string    `json:"username"`
-	ExpiresAt time.Time `json:"expires_at"`
+func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteExpiredRefreshTokens)
+	return err
 }
 
-func (q *Queries) StoreRefreshToken(ctx context.Context, arg StoreRefreshTokenParams) error {
-	_, err := q.db.Exec(ctx, storeRefreshToken, arg.TokenHash, arg.UserID, arg.Username, arg.ExpiresAt)
+const deleteRefreshToken = `-- name: DeleteRefreshToken :exec
+DELETE FROM refresh_tokens WHERE token_hash = $1
+`
+
+func (q *Queries) DeleteRefreshToken(ctx context.Context, tokenHash string) error {
+	_, err := q.db.Exec(ctx, deleteRefreshToken, tokenHash)
 	return err
 }
 
@@ -45,20 +45,25 @@ func (q *Queries) GetRefreshToken(ctx context.Context, tokenHash string) (Refres
 	return i, err
 }
 
-const deleteRefreshToken = `-- name: DeleteRefreshToken :exec
-DELETE FROM refresh_tokens WHERE token_hash = $1
+const storeRefreshToken = `-- name: StoreRefreshToken :exec
+INSERT INTO refresh_tokens (token_hash, user_id, username, expires_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (token_hash) DO UPDATE SET expires_at = EXCLUDED.expires_at
 `
 
-func (q *Queries) DeleteRefreshToken(ctx context.Context, tokenHash string) error {
-	_, err := q.db.Exec(ctx, deleteRefreshToken, tokenHash)
-	return err
+type StoreRefreshTokenParams struct {
+	TokenHash string    `json:"token_hash"`
+	UserID    int       `json:"user_id"`
+	Username  string    `json:"username"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
-const deleteExpiredRefreshTokens = `-- name: DeleteExpiredRefreshTokens :exec
-DELETE FROM refresh_tokens WHERE expires_at < NOW()
-`
-
-func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, deleteExpiredRefreshTokens)
+func (q *Queries) StoreRefreshToken(ctx context.Context, arg StoreRefreshTokenParams) error {
+	_, err := q.db.Exec(ctx, storeRefreshToken,
+		arg.TokenHash,
+		arg.UserID,
+		arg.Username,
+		arg.ExpiresAt,
+	)
 	return err
 }
