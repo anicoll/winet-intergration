@@ -7,10 +7,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
 	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
+	authmocks "github.com/anicoll/winet-integration/mocks/auth"
 )
 
 const (
@@ -20,16 +22,6 @@ const (
 	testUserID   = 42
 )
 
-// mockUserStore implements UserStore for tests.
-type mockUserStore struct {
-	user dbpkg.User
-	err  error
-}
-
-func (m *mockUserStore) GetUserByUsername(_ context.Context, _ string) (dbpkg.User, error) {
-	return m.user, m.err
-}
-
 // hashForTest uses minimum bcrypt cost so tests run fast.
 func hashForTest(t *testing.T, pw string) string {
 	t.Helper()
@@ -38,19 +30,31 @@ func hashForTest(t *testing.T, pw string) string {
 	return string(h)
 }
 
-func newTestService(t *testing.T, store UserStore) *Service {
+// noopTokenStore returns a TokenStore mock that accepts any call and returns zero values.
+func noopTokenStore(t *testing.T) *authmocks.TokenStore {
 	t.Helper()
-	return NewService(testSecret, 15*time.Minute, 24*time.Hour, store)
+	ts := authmocks.NewTokenStore(t)
+	ts.EXPECT().StoreRefreshToken(mock.Anything, mock.Anything).Return(nil).Maybe()
+	ts.EXPECT().GetRefreshToken(mock.Anything, mock.Anything).Return(dbpkg.RefreshToken{}, errors.New("not found")).Maybe()
+	ts.EXPECT().DeleteRefreshToken(mock.Anything, mock.Anything).Return(nil).Maybe()
+	ts.EXPECT().DeleteExpiredRefreshTokens(mock.Anything).Return(nil).Maybe()
+	return ts
 }
 
-func validUserStore(t *testing.T) *mockUserStore {
-	return &mockUserStore{
-		user: dbpkg.User{
-			ID:           testUserID,
-			Username:     testUsername,
-			PasswordHash: hashForTest(t, testPassword),
-		},
-	}
+func validUserStore(t *testing.T) *authmocks.UserStore {
+	t.Helper()
+	us := authmocks.NewUserStore(t)
+	us.EXPECT().GetUserByUsername(mock.Anything, mock.Anything).Return(dbpkg.User{
+		ID:           testUserID,
+		Username:     testUsername,
+		PasswordHash: hashForTest(t, testPassword),
+	}, nil).Maybe()
+	return us
+}
+
+func newTestService(t *testing.T, userStore UserStore) *Service {
+	t.Helper()
+	return NewService(testSecret, 15*time.Minute, 24*time.Hour, userStore, noopTokenStore(t))
 }
 
 // --- Login ---
@@ -66,7 +70,9 @@ func TestLogin_Success(t *testing.T) {
 }
 
 func TestLogin_UnknownUser(t *testing.T) {
-	svc := newTestService(t, &mockUserStore{err: errors.New("not found")})
+	us := authmocks.NewUserStore(t)
+	us.EXPECT().GetUserByUsername(mock.Anything, mock.Anything).Return(dbpkg.User{}, errors.New("not found"))
+	svc := newTestService(t, us)
 
 	_, _, err := svc.Login(context.Background(), "nobody", testPassword)
 
@@ -88,7 +94,7 @@ func TestLogin_StoresRefreshToken(t *testing.T) {
 	require.NoError(t, err)
 
 	// The stored token should be findable — a Refresh call proves it.
-	newAccess, err := svc.Refresh(refreshToken)
+	newAccess, err := svc.Refresh(context.Background(), refreshToken)
 	require.NoError(t, err)
 	assert.NotEmpty(t, newAccess)
 }
@@ -100,7 +106,7 @@ func TestRefresh_Success(t *testing.T) {
 	_, refreshToken, err := svc.Login(context.Background(), testUsername, testPassword)
 	require.NoError(t, err)
 
-	newAccess, err := svc.Refresh(refreshToken)
+	newAccess, err := svc.Refresh(context.Background(), refreshToken)
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, newAccess)
@@ -109,18 +115,18 @@ func TestRefresh_Success(t *testing.T) {
 func TestRefresh_UnknownToken(t *testing.T) {
 	svc := newTestService(t, validUserStore(t))
 
-	_, err := svc.Refresh("this-token-was-never-issued")
+	_, err := svc.Refresh(context.Background(), "this-token-was-never-issued")
 
 	assert.ErrorIs(t, err, ErrInvalidToken)
 }
 
 func TestRefresh_ExpiredToken(t *testing.T) {
 	// Create a service with a zero refresh TTL so the token is already expired.
-	svc := NewService(testSecret, 15*time.Minute, -time.Second, validUserStore(t))
+	svc := NewService(testSecret, 15*time.Minute, -time.Second, validUserStore(t), noopTokenStore(t))
 	_, refreshToken, err := svc.Login(context.Background(), testUsername, testPassword)
 	require.NoError(t, err)
 
-	_, err = svc.Refresh(refreshToken)
+	_, err = svc.Refresh(context.Background(), refreshToken)
 
 	assert.ErrorIs(t, err, ErrInvalidToken)
 }
@@ -130,7 +136,7 @@ func TestRefresh_AccessTokenContainsCorrectClaims(t *testing.T) {
 	_, refreshToken, err := svc.Login(context.Background(), testUsername, testPassword)
 	require.NoError(t, err)
 
-	newAccess, err := svc.Refresh(refreshToken)
+	newAccess, err := svc.Refresh(context.Background(), refreshToken)
 	require.NoError(t, err)
 
 	claims, err := svc.ValidateAccessToken(newAccess)
@@ -146,16 +152,16 @@ func TestLogout_RevokesToken(t *testing.T) {
 	_, refreshToken, err := svc.Login(context.Background(), testUsername, testPassword)
 	require.NoError(t, err)
 
-	svc.Logout(refreshToken)
+	svc.Logout(context.Background(), refreshToken)
 
-	_, err = svc.Refresh(refreshToken)
+	_, err = svc.Refresh(context.Background(), refreshToken)
 	assert.ErrorIs(t, err, ErrInvalidToken)
 }
 
 func TestLogout_UnknownTokenIsNoop(t *testing.T) {
 	svc := newTestService(t, validUserStore(t))
 	// Should not panic.
-	assert.NotPanics(t, func() { svc.Logout("never-issued") })
+	assert.NotPanics(t, func() { svc.Logout(context.Background(), "never-issued") })
 }
 
 // --- ValidateAccessToken ---
@@ -174,7 +180,7 @@ func TestValidateAccessToken_Valid(t *testing.T) {
 
 func TestValidateAccessToken_Expired(t *testing.T) {
 	// Zero access TTL means the token expires immediately.
-	svc := NewService(testSecret, -time.Second, 24*time.Hour, validUserStore(t))
+	svc := NewService(testSecret, -time.Second, 24*time.Hour, validUserStore(t), noopTokenStore(t))
 	accessToken, _, err := svc.Login(context.Background(), testUsername, testPassword)
 	require.NoError(t, err)
 
@@ -185,7 +191,7 @@ func TestValidateAccessToken_Expired(t *testing.T) {
 
 func TestValidateAccessToken_WrongSecret(t *testing.T) {
 	svcA := newTestService(t, validUserStore(t))
-	svcB := NewService("a-completely-different-secret-xyz", 15*time.Minute, 24*time.Hour, validUserStore(t))
+	svcB := NewService("a-completely-different-secret-xyz", 15*time.Minute, 24*time.Hour, validUserStore(t), noopTokenStore(t))
 
 	tokenFromA, _, err := svcA.Login(context.Background(), testUsername, testPassword)
 	require.NoError(t, err)

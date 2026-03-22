@@ -2,17 +2,20 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/anicoll/winet-integration/internal/pkg/auth"
 	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
+	authmocks "github.com/anicoll/winet-integration/mocks/auth"
 )
 
 const (
@@ -26,23 +29,25 @@ var okHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 })
 
-// stubUserStore implements auth.UserStore for middleware tests.
-type stubUserStore struct{ user dbpkg.User }
-
-func (s *stubUserStore) GetUserByUsername(_ context.Context, _ string) (dbpkg.User, error) {
-	return s.user, nil
-}
-
 func newMiddlewareAuthService(t *testing.T) *auth.Service {
 	t.Helper()
 	h, err := bcrypt.GenerateFromPassword([]byte(middlewareTestPassword), bcrypt.MinCost)
 	require.NoError(t, err)
-	store := &stubUserStore{user: dbpkg.User{
+
+	us := authmocks.NewUserStore(t)
+	us.EXPECT().GetUserByUsername(mock.Anything, mock.Anything).Return(dbpkg.User{
 		ID:           1,
 		Username:     middlewareTestUsername,
 		PasswordHash: string(h),
-	}}
-	return auth.NewService(middlewareTestSecret, 15*time.Minute, 24*time.Hour, store)
+	}, nil).Maybe()
+
+	ts := authmocks.NewTokenStore(t)
+	ts.EXPECT().StoreRefreshToken(mock.Anything, mock.Anything).Return(nil).Maybe()
+	ts.EXPECT().GetRefreshToken(mock.Anything, mock.Anything).Return(dbpkg.RefreshToken{}, errors.New("not found")).Maybe()
+	ts.EXPECT().DeleteRefreshToken(mock.Anything, mock.Anything).Return(nil).Maybe()
+	ts.EXPECT().DeleteExpiredRefreshTokens(mock.Anything).Return(nil).Maybe()
+
+	return auth.NewService(middlewareTestSecret, 15*time.Minute, 24*time.Hour, us, ts)
 }
 
 func validBearerToken(t *testing.T, svc *auth.Service) string {
