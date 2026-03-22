@@ -2,13 +2,13 @@
 
 ## Progress
 
-| # | PR | Status | Notes |
-|---|---|---|---|
-| B1 | `feat/auth-users-db` | **Done** | Migration + sqlc queries + generated code |
-| B2 | `feat/auth-core` | **In progress** | Auth service, middleware, OpenAPI, CORS wired — build passing. createuser CLI remaining |
-| B3 | `feat/auth-createuser-cmd` | **Done** | `cmd/createuser/main.go` |
-| F1 | `feat/auth-context` | Pending | |
-| F2 | `feat/auth-api` | Pending | |
+| #   | PR                         | Status   | Notes                                                                                                                       |
+| --- | -------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| B1  | `feat/auth-users-db`       | **Done** | Migration + sqlc queries + generated code                                                                                   |
+| B2  | `feat/auth-core`           | **Done** | Auth service, middleware, OpenAPI, CORS wired, tests added                                                                  |
+| B3  | `feat/auth-createuser-cmd` | **Done** | `cmd/createuser/main.go`                                                                                                    |
+| F1  | `feat/auth-context`        | **Done** | `src/lib/auth.ts`, `src/context/AuthContext.tsx`, `src/pages/Login.tsx`, `src/components/ProtectedRoute.tsx`, `src/App.tsx` |
+| F2  | `feat/auth-api`            | Pending  |                                                                                                                             |
 
 ---
 
@@ -17,6 +17,7 @@
 Add JWT-based authentication between the sunbase frontend and winet-intergration backend so the API can be safely exposed over HTTPS.
 
 No third-party auth provider. Everything is self-contained:
+
 - Password hashing: bcrypt via existing `pkg/hasher` package
 - Token signing: JWT (`github.com/golang-jwt/jwt/v5`)
 - User creation: local CLI tool (not a public endpoint)
@@ -26,12 +27,13 @@ No third-party auth provider. Everything is self-contained:
 
 ## Token Strategy
 
-| Token | Type | TTL | Storage (client) | Storage (server) |
-|---|---|---|---|---|
-| Access token | Signed JWT | 15 min | React memory / context | Stateless (validated by signature) |
+| Token         | Type                 | TTL     | Storage (client)                 | Storage (server)                            |
+| ------------- | -------------------- | ------- | -------------------------------- | ------------------------------------------- |
+| Access token  | Signed JWT           | 15 min  | React memory / context           | Stateless (validated by signature)          |
 | Refresh token | Opaque random string | 30 days | httpOnly, SameSite=Strict cookie | In-memory map (hashed key, lost on restart) |
 
 **Flow:**
+
 1. `POST /auth/login` — validates credentials, returns access JWT in body + sets refresh cookie
 2. Frontend stores access token in React context (memory-only, not localStorage)
 3. Every API request sends `Authorization: Bearer <access_token>`
@@ -52,6 +54,7 @@ No third-party auth provider. Everything is self-contained:
 **Database migration** (users only — no token table needed)
 
 `migrations/000005_create_users_table.up.sql`
+
 ```sql
 CREATE TABLE IF NOT EXISTS users (
     id            SERIAL PRIMARY KEY,
@@ -63,11 +66,13 @@ CREATE TABLE IF NOT EXISTS users (
 ```
 
 `migrations/000005_create_users_table.down.sql`
+
 ```sql
 DROP TABLE IF EXISTS users;
 ```
 
 **sqlc queries** (`internal/pkg/database/queries/users.sql`)
+
 ```sql
 -- name: GetUserByUsername :one
 SELECT * FROM users WHERE username = $1 LIMIT 1;
@@ -79,6 +84,7 @@ INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING *;
 Run `sqlc generate` to regenerate `internal/pkg/database/db/`.
 
 Files created:
+
 - `migrations/000005_create_users_table.up.sql`
 - `migrations/000005_create_users_table.down.sql`
 - `internal/pkg/database/queries/users.sql`
@@ -90,11 +96,13 @@ Files created:
 ### PR 2 — `feat/auth-core` (build passing, createuser CLI still pending as PR 3)
 
 **New dependency**
+
 ```
 github.com/golang-jwt/jwt/v5
 ```
 
 **Config additions** (`internal/pkg/config/config.go`)
+
 ```go
 type AuthConfig struct {
     JWTSecret       string        `env:"JWT_SECRET,required"`
@@ -102,6 +110,7 @@ type AuthConfig struct {
     RefreshTokenTTL time.Duration `env:"JWT_REFRESH_TTL" envDefault:"720h"`
 }
 ```
+
 Add `AuthCfg AuthConfig` to `Config`.
 
 **Auth service** (`internal/pkg/auth/auth.go`)
@@ -125,6 +134,7 @@ type Service struct {
 ```
 
 Responsibilities:
+
 - `IssueAccessToken(userID int, username string) (string, error)` — signs JWT with HS256
 - `ValidateAccessToken(tokenStr string) (*Claims, error)` — parses and validates JWT; no I/O
 - `Login(ctx, username, password string) (accessToken, refreshToken string, error)` — looks up user via DB (one query, login only), verifies password with `pkg/hasher`, issues both tokens, stores hashed refresh token in `sync.Map`
@@ -138,6 +148,7 @@ The DB is only touched at login (one `GetUserByUsername` query). All refresh/log
 **OpenAPI additions** (`gen/api.yaml`)
 
 Add to paths:
+
 ```yaml
 /auth/login:
   post:
@@ -175,6 +186,7 @@ Add to paths:
 ```
 
 Add schemas:
+
 ```yaml
 LoginRequest:
   type: object
@@ -196,6 +208,7 @@ LoginResponse:
 Run `oapi-codegen` (via `make generate` or equivalent) to regenerate `pkg/server/api.gen.go`.
 
 Files created/modified so far:
+
 - `go.mod` / `go.sum` — added `github.com/golang-jwt/jwt/v5`
 - `internal/pkg/config/config.go` — added `AuthConfig` struct and `AllowedOrigin` field to `Config`
 - `internal/pkg/auth/auth.go` — new; `Service` with in-memory `sync.Map`, `Login`, `Refresh`, `Logout`, `ValidateAccessToken`, `StartCleanup`
@@ -221,20 +234,24 @@ func AuthMiddleware(authSvc AuthService) func(http.Handler) http.Handler
 **CORS update** (`internal/pkg/server/middleware.go`)
 
 `LoggingMiddleware` currently reflects any Origin back without credentials support. When cookies are involved, the browser requires `Access-Control-Allow-Credentials: true` and a non-wildcard origin. Update to:
+
 ```go
 // Only allow a configured ALLOWED_ORIGIN; reflect that back with credentials flag.
 w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 w.Header().Set("Access-Control-Allow-Credentials", "true")
 w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 ```
-Add `AllowedOrigin string \`env:"ALLOWED_ORIGIN,required"\`` to `Config`.
+
+Add `AllowedOrigin string \`env:"ALLOWED_ORIGIN,required"\``to`Config`.
 
 **Wire everything** (`cmd/cmd.go`)
+
 - Construct `auth.Service` with DB + config, start its cleanup goroutine
 - Add `AuthMiddleware` to the middleware chain
 - Implement auth handlers in `internal/pkg/server/server.go`
 
 **Refresh token cookie settings:**
+
 ```
 Name:     "refresh_token"
 HttpOnly: true
@@ -251,11 +268,13 @@ MaxAge:   RefreshTokenTTL in seconds
 **New CLI tool:** `cmd/createuser/main.go`
 
 Usage:
+
 ```
 DATABASE_URL=postgres://... ./createuser --username alice --password s3cr3t
 ```
 
 Logic:
+
 1. Parse `--username` and `--password` flags
 2. Validate: username non-empty, password >= 12 chars
 3. Hash password using existing `pkg/hasher.HashPassword()`
@@ -272,13 +291,18 @@ This tool is run locally (or via SSH) and never exposed publicly.
 ### PR 1 — `feat/auth-context`
 
 **`src/lib/auth.ts`** — raw API calls for auth (no auth header needed):
+
 ```ts
-export async function login(username: string, password: string): Promise<{ access_token: string }>
-export async function refresh(): Promise<{ access_token: string }>
-export async function logout(): Promise<void>
+export async function login(
+  username: string,
+  password: string,
+): Promise<{ access_token: string }>;
+export async function refresh(): Promise<{ access_token: string }>;
+export async function logout(): Promise<void>;
 ```
 
 **`src/context/AuthContext.tsx`** — React context:
+
 ```ts
 interface AuthContextValue {
   accessToken: string | null;
@@ -293,12 +317,14 @@ On mount: calls `refresh()` to restore session from cookie. Sets `isRestoring` d
 **`src/pages/Login.tsx`** — login form using existing shadcn/ui `Card`, `Button` components. Shows error on bad credentials. Redirects to `/` on success.
 
 **`src/components/ProtectedRoute.tsx`**
+
 ```tsx
 // Renders children if authenticated, redirects to /login if not.
 // Shows nothing (or a spinner) while isRestoring is true.
 ```
 
 **`src/App.tsx`** updates:
+
 - Wrap app in `AuthProvider`
 - Add `/login` route
 - Wrap `/` with `ProtectedRoute`
@@ -308,6 +334,7 @@ On mount: calls `refresh()` to restore session from cookie. Sets `isRestoring` d
 ### PR 2 — `feat/auth-api`
 
 **`src/lib/api.ts`** updates:
+
 - Accept access token parameter (sourced from AuthContext)
 - Send `Authorization: Bearer <token>` on all requests
 - On 401 response: call `refresh()` once, update stored token, retry original request
@@ -320,14 +347,16 @@ The cleanest pattern: export a `createApiClient(getToken, onUnauthorized)` facto
 ## Environment Variables Summary
 
 ### winet-intergration
-| Variable | Required | Default | Notes |
-|---|---|---|---|
-| `JWT_SECRET` | Yes | — | Min 32 chars, random. Generate with `openssl rand -base64 32` |
-| `JWT_ACCESS_TTL` | No | `15m` | Go duration string |
-| `JWT_REFRESH_TTL` | No | `720h` | Go duration string (30 days) |
-| `ALLOWED_ORIGIN` | Yes | — | Frontend origin e.g. `https://sunbase.example.com` |
+
+| Variable          | Required | Default | Notes                                                         |
+| ----------------- | -------- | ------- | ------------------------------------------------------------- |
+| `JWT_SECRET`      | Yes      | —       | Min 32 chars, random. Generate with `openssl rand -base64 32` |
+| `JWT_ACCESS_TTL`  | No       | `15m`   | Go duration string                                            |
+| `JWT_REFRESH_TTL` | No       | `720h`  | Go duration string (30 days)                                  |
+| `ALLOWED_ORIGIN`  | Yes      | —       | Frontend origin e.g. `https://sunbase.example.com`            |
 
 ### sunbase
+
 No new env vars needed. Auth endpoints are relative to existing `VITE_API_BASE_URL`.
 
 ---

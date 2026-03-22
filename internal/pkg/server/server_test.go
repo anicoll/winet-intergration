@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"iter"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/anicoll/winet-integration/internal/pkg/auth"
 	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
+	authmocks "github.com/anicoll/winet-integration/mocks/auth"
 	servermocks "github.com/anicoll/winet-integration/mocks/server"
 	api "github.com/anicoll/winet-integration/pkg/server"
 )
@@ -209,23 +209,25 @@ const (
 	authTestUsername = "testuser"
 )
 
-// authUserStore implements auth.UserStore using a fixed user.
-type authUserStore struct{ user dbpkg.User }
-
-func (s *authUserStore) GetUserByUsername(_ context.Context, _ string) (dbpkg.User, error) {
-	return s.user, nil
-}
-
 func newAuthService(t *testing.T) *auth.Service {
 	t.Helper()
 	h, err := bcrypt.GenerateFromPassword([]byte(authTestPassword), bcrypt.MinCost)
 	require.NoError(t, err)
-	store := &authUserStore{user: dbpkg.User{
+
+	us := authmocks.NewUserStore(t)
+	us.EXPECT().GetUserByUsername(mock.Anything, mock.Anything).Return(dbpkg.User{
 		ID:           1,
 		Username:     authTestUsername,
 		PasswordHash: string(h),
-	}}
-	return auth.NewService(authTestSecret, 15*time.Minute, 24*time.Hour, store)
+	}, nil).Maybe()
+
+	ts := authmocks.NewTokenStore(t)
+	ts.EXPECT().StoreRefreshToken(mock.Anything, mock.Anything).Return(nil).Maybe()
+	ts.EXPECT().GetRefreshToken(mock.Anything, mock.Anything).Return(dbpkg.RefreshToken{}, errors.New("not found")).Maybe()
+	ts.EXPECT().DeleteRefreshToken(mock.Anything, mock.Anything).Return(nil).Maybe()
+	ts.EXPECT().DeleteExpiredRefreshTokens(mock.Anything).Return(nil).Maybe()
+
+	return auth.NewService(authTestSecret, 15*time.Minute, 24*time.Hour, us, ts)
 }
 
 func newAuthTestServer(t *testing.T) *server {
