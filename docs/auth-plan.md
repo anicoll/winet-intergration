@@ -6,7 +6,7 @@
 |---|---|---|---|
 | B1 | `feat/auth-users-db` | **Done** | Migration + sqlc queries + generated code |
 | B2 | `feat/auth-core` | **In progress** | Auth service, middleware, OpenAPI, CORS wired — build passing. createuser CLI remaining |
-| B3 | `feat/auth-createuser-cmd` | Pending | |
+| B3 | `feat/auth-createuser-cmd` | **Done** | `cmd/createuser/main.go` |
 | F1 | `feat/auth-context` | Pending | |
 | F2 | `feat/auth-api` | Pending | |
 
@@ -246,7 +246,7 @@ MaxAge:   RefreshTokenTTL in seconds
 
 ---
 
-### PR 3 — `feat/auth-createuser-cmd`
+### PR 3 — `feat/auth-createuser-cmd` ✓ Done
 
 **New CLI tool:** `cmd/createuser/main.go`
 
