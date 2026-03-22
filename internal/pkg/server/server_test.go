@@ -436,7 +436,7 @@ func TestGetAmberUsageFromTo_ReturnsJSON(t *testing.T) {
 	from := now.Add(-time.Hour)
 	to := now
 	rec := httptest.NewRecorder()
-	svc.GetAmberUsageFromTo(rec, httptest.NewRequest(http.MethodGet, "/amber/usage/from/to", nil), from, to, api.GetAmberUsageFromToParams{})
+	svc.GetAmberUsageFromTo(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/amber/usage/from/to", nil), from, to, api.GetAmberUsageFromToParams{})
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
@@ -459,7 +459,7 @@ func TestGetAmberUsageFromTo_EmptyResult_ReturnsEmptyArray(t *testing.T) {
 
 	now := time.Now().UTC()
 	rec := httptest.NewRecorder()
-	svc.GetAmberUsageFromTo(rec, httptest.NewRequest(http.MethodGet, "/amber/usage/from/to", nil), now.Add(-time.Hour), now, api.GetAmberUsageFromToParams{})
+	svc.GetAmberUsageFromTo(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/amber/usage/from/to", nil), now.Add(-time.Hour), now, api.GetAmberUsageFromToParams{})
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	var got []api.AmberUsage
@@ -474,7 +474,7 @@ func TestGetAmberUsageFromTo_DBError_Returns500(t *testing.T) {
 
 	now := time.Now().UTC()
 	rec := httptest.NewRecorder()
-	svc.GetAmberUsageFromTo(rec, httptest.NewRequest(http.MethodGet, "/amber/usage/from/to", nil), now.Add(-time.Hour), now, api.GetAmberUsageFromToParams{})
+	svc.GetAmberUsageFromTo(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/amber/usage/from/to", nil), now.Add(-time.Hour), now, api.GetAmberUsageFromToParams{})
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }

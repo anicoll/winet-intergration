@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	ac "github.com/anicoll/winet-integration/pkg/amber"
-	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 func newTestClient(t *testing.T, handler http.Handler) *client {
@@ -69,7 +69,7 @@ func TestGetUsage_MapsResponseCorrectly(t *testing.T) {
 		assert.Contains(t, r.URL.Path, "/usage")
 		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(usageResp)
+		require.NoError(t, json.NewEncoder(w).Encode(usageResp))
 	})
 
 	c := newTestClient(t, handler)
@@ -124,7 +124,7 @@ func TestGetUsage_MultipleIntervals(t *testing.T) {
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(usageResp)
+		require.NoError(t, json.NewEncoder(w).Encode(usageResp))
 	})
 
 	c := newTestClient(t, handler)
@@ -137,7 +137,7 @@ func TestGetUsage_MultipleIntervals(t *testing.T) {
 func TestGetUsage_EmptyResponse_ReturnsEmpty(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]any{})
+		require.NoError(t, json.NewEncoder(w).Encode([]any{}))
 	})
 
 	c := newTestClient(t, handler)
@@ -165,7 +165,7 @@ func TestGetUsage_SendsCorrectQueryParams(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedQuery = r.URL.RawQuery
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]any{})
+		require.NoError(t, json.NewEncoder(w).Encode([]any{}))
 	})
 
 	c := newTestClient(t, handler)

@@ -61,7 +61,7 @@ func (d *Database) WriteAmberUsage(ctx context.Context, usage []dbq.Amberusage) 
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	qtx := d.queries.WithTx(tx)
 	for _, u := range usage {
