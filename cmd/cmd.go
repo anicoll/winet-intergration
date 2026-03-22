@@ -21,6 +21,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/anicoll/winet-integration/internal/pkg/amber"
+	"github.com/anicoll/winet-integration/internal/pkg/auth"
 	"github.com/anicoll/winet-integration/internal/pkg/config"
 	"github.com/anicoll/winet-integration/internal/pkg/database"
 	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
@@ -112,6 +113,9 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	pub := publisher.NewMultiPublisher(db, mqttPublisher)
 
+	authSvc := auth.NewService(cfg.AuthCfg.JWTSecret, cfg.AuthCfg.AccessTokenTTL, cfg.AuthCfg.RefreshTokenTTL, db)
+	authSvc.StartCleanup(ctx, time.Hour)
+
 	errorChan := make(chan error, errorChannelBuffer)
 	winetSvc := winet.New(&cfg.WinetCfg, pub, errorChan)
 
@@ -146,7 +150,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	// Start HTTP server
 	eg.Go(func() error {
-		return startHTTPServer(ctx, winetSvc, db, health, logger)
+		return startHTTPServer(ctx, winetSvc, db, authSvc, health, cfg.AllowedOrigin, logger)
 	})
 
 	// Start error handler
@@ -401,11 +405,11 @@ func startDecisionService(ctx context.Context, winetSvc server.WinetService, db 
 	}
 }
 
-func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db *database.Database, health *healthState, logger *zap.Logger) error {
+func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db *database.Database, authSvc *auth.Service, health *healthState, allowedOrigin string, logger *zap.Logger) error {
 	logger.Info("Starting HTTP server", zap.String("addr", serverAddr))
 
-	apiHandler := api.HandlerWithOptions(server.New(winetSvc, db), api.StdHTTPServerOptions{
-		Middlewares: []api.MiddlewareFunc{server.TimeoutMiddleware, server.LoggingMiddleware},
+	apiHandler := api.HandlerWithOptions(server.New(winetSvc, db, authSvc), api.StdHTTPServerOptions{
+		Middlewares: []api.MiddlewareFunc{server.TimeoutMiddleware, server.LoggingMiddleware(allowedOrigin), server.AuthMiddleware(authSvc)},
 		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			logger.Error("HTTP handler error", zap.Error(err))
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)

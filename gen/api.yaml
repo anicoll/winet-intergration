@@ -3,6 +3,44 @@ info:
   version: 1.0.0
   title: Winet-S Server
 paths:
+  /auth/login:
+    post:
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid credentials
+
+  /auth/refresh:
+    post:
+      summary: Refresh access token using httpOnly cookie
+      responses:
+        "200":
+          description: New access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Refresh token invalid or expired
+
+  /auth/logout:
+    post:
+      summary: Logout and revoke refresh token
+      responses:
+        "204":
+          description: Logged out
   /properties:
     get:
       summary: Get properties
@@ -140,6 +178,27 @@ paths:
                 $ref: "#/components/schemas/Empty"
 components:
   schemas:
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          example: alice
+        password:
+          type: string
+          example: supersecret
+
+    LoginResponse:
+      type: object
+      required:
+        - access_token
+      properties:
+        access_token:
+          type: string
+
     Empty:
       type: object
     ChangeBatteryStatePayload:
