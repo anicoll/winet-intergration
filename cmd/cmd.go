@@ -28,6 +28,7 @@ import (
 	"github.com/anicoll/winet-integration/internal/pkg/database"
 	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
 	"github.com/anicoll/winet-integration/internal/pkg/database/migration"
+	"github.com/anicoll/winet-integration/internal/pkg/feedin"
 	"github.com/anicoll/winet-integration/internal/pkg/mqtt"
 	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 	"github.com/anicoll/winet-integration/internal/pkg/server"
@@ -129,6 +130,14 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	errorChan := make(chan error, errorChannelBuffer)
 	winetSvc := winet.New(&cfg.WinetCfg, pub, errorChan)
 
+	loc, err := time.LoadLocation(cfg.Timezone)
+	if err != nil {
+		return fmt.Errorf("failed to load timezone: %w", err)
+	}
+
+	feedinCtrl := feedin.New(winetSvc, loc)
+	winetSvc.SetDeviceStatusHook(feedinCtrl.UpdateFromStatuses)
+
 	health := &healthState{}
 	health.set("starting")
 
@@ -141,7 +150,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	// Start amber price processing service
 	eg.Go(func() error {
-		return startAmberPriceService(ctx, &cfg.AmberCfg, db, errorChan, logger)
+		return startAmberPriceService(ctx, &cfg.AmberCfg, db, errorChan, logger, feedinCtrl.Evaluate)
 	})
 
 	// Start amber usage processing service
@@ -157,11 +166,6 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	// eg.Go(func() error {
 	// 	return startDecisionService(ctx, winetSvc, db, errorChan, logger)
 	// })
-
-	// enable feedin at 5PM daily
-	eg.Go(func() error {
-		return dailyFeedinEnabler(ctx, cfg.Timezone, winetSvc, logger)
-	})
 
 	// Start HTTP server
 	eg.Go(func() error {
@@ -213,7 +217,7 @@ func setupDatabase(ctx context.Context, dsn, migrationsPath string) (*database.D
 	return database.NewDatabase(pool), pool.Close, nil
 }
 
-func startAmberPriceService(ctx context.Context, amberCfg *config.AmberConfig, db *database.Database, errChan chan error, logger *zap.Logger) error {
+func startAmberPriceService(ctx context.Context, amberCfg *config.AmberConfig, db *database.Database, errChan chan error, logger *zap.Logger, onPriceUpdate func([]dbpkg.Amberprice)) error {
 	logger.Info("Starting amber price service")
 
 	if amberCfg == nil || amberCfg.Host == "" || amberCfg.Token == "" {
@@ -232,7 +236,7 @@ func startAmberPriceService(ctx context.Context, amberCfg *config.AmberConfig, d
 	site := sites[0]
 
 	// Initial price fetch
-	if err := fetchAndStorePrices(ctx, svc, db, site.Id); err != nil {
+	if _, err := fetchAndStorePrices(ctx, svc, db, site.Id); err != nil {
 		return fmt.Errorf("initial price fetch failed: %w", err)
 	}
 
@@ -240,7 +244,8 @@ func startAmberPriceService(ctx context.Context, amberCfg *config.AmberConfig, d
 	c := cron.New()
 	if _, err := c.AddFunc(priceUpdateSchedule, func() {
 		time.Sleep(priceUpdateDelay) // ensure we get the latest prices
-		if err := fetchAndStorePrices(context.Background(), svc, db, site.Id); err != nil {
+		prices, err := fetchAndStorePrices(context.Background(), svc, db, site.Id)
+		if err != nil {
 			logger.Error("amber price update failed", zap.Error(err))
 			select {
 			case errChan <- fmt.Errorf("%w: %v", errCron, err):
@@ -250,6 +255,9 @@ func startAmberPriceService(ctx context.Context, amberCfg *config.AmberConfig, d
 			return
 		}
 		logger.Info("amber prices updated")
+		if onPriceUpdate != nil {
+			onPriceUpdate(prices)
+		}
 	}); err != nil {
 		return fmt.Errorf("failed to schedule amber price updates: %w", err)
 	}
@@ -330,17 +338,17 @@ func fetchAndStoreUsage(ctx context.Context, svc AmberUsageFetcher, db AmberUsag
 func fetchAndStorePrices(ctx context.Context, svc interface {
 	GetPrices(ctx context.Context, siteID string) ([]dbpkg.Amberprice, error)
 }, db *database.Database, siteId string,
-) error {
+) ([]dbpkg.Amberprice, error) {
 	prices, err := svc.GetPrices(ctx, siteId)
 	if err != nil {
-		return fmt.Errorf("failed to get prices: %w", err)
+		return nil, fmt.Errorf("failed to get prices: %w", err)
 	}
 
 	if err := db.WriteAmberPrices(ctx, prices); err != nil {
-		return fmt.Errorf("failed to write prices to database: %w", err)
+		return nil, fmt.Errorf("failed to write prices to database: %w", err)
 	}
 
-	return nil
+	return prices, nil
 }
 
 type winetSvc interface {
@@ -402,30 +410,6 @@ func startWinetService(ctx context.Context, winetSvc winetSvc, health *healthSta
 			return ctx.Err()
 		}
 	}
-}
-
-func dailyFeedinEnabler(ctx context.Context, timezone string, winetSvc server.WinetService, logger *zap.Logger) error {
-	if timezone == "" {
-		timezone = "Australia/Adelaide"
-	}
-	location, err := time.LoadLocation(timezone)
-	if err != nil {
-		return err
-	}
-	c := cron.New(cron.WithLocation(location))
-	if _, err := c.AddFunc("0 17 * * *", func() {
-		logger.Info("enabling feedin")
-		success, errr := winetSvc.SetFeedInLimitation(false)
-		if !success {
-			err = errr
-		}
-	}); err != nil {
-		return err
-	}
-	c.Start()
-	<-ctx.Done()
-	c.Stop()
-	return ctx.Err()
 }
 
 func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db *database.Database, authSvc *auth.Service, health *healthState, allowedOrigins []string, secureCookies bool, logger *zap.Logger) error {
