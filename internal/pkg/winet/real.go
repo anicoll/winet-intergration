@@ -42,6 +42,11 @@ func (s *service) handleRealMessage(data []byte) {
 		datapoints = append(datapoints, dataPoint)
 	}
 	datapointsToPublish[*currentDevice] = datapoints
+
+	if s.onDeviceStatuses != nil {
+		s.onDeviceStatuses(datapoints)
+	}
+
 	if err := s.publisher.PublishData(contxt.NewContext(time.Second*5), datapointsToPublish); err != nil {
 		s.sendIfErr(err)
 		// still signal processed so waiter unblocks — the data error is non-fatal

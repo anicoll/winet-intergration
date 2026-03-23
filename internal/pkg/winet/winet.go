@@ -86,6 +86,15 @@ type service struct {
 	pending    pendingCmd
 	loginReady chan struct{} // closed by handleLoginMessage to start poll loop
 	cancelPoll context.CancelFunc
+
+	onDeviceStatuses func(statuses []model.DeviceStatus)
+}
+
+// SetDeviceStatusHook registers a callback that is invoked (from handleRealMessage) each time
+// a fresh batch of device statuses arrives. The callback must be non-blocking — it should only
+// update in-memory state and must not send inverter commands (which require the pending slot).
+func (s *service) SetDeviceStatusHook(fn func(statuses []model.DeviceStatus)) {
+	s.onDeviceStatuses = fn
 }
 
 func New(cfg *config.WinetConfig, pub publisher.DataPublisher, errChan chan error) *service {
