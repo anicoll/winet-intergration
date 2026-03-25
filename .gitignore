@@ -31,6 +31,3 @@ mosquitto/data/*
 mosquitto/log/*
 __debug_bin**
 winet-integration
-
-# generated protobuf / connect-go code
-gen/winet/

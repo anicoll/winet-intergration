@@ -3,6 +3,7 @@ module github.com/anicoll/winet-integration
 go 1.26.0
 
 require (
+	connectrpc.com/connect v1.19.1
 	github.com/caarlos0/env/v11 v11.4.0
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/getkin/kin-openapi v0.134.0
@@ -19,6 +20,7 @@ require (
 	go.uber.org/zap v1.27.1
 	golang.org/x/crypto v0.49.0
 	golang.org/x/sync v0.20.0
+	google.golang.org/protobuf v1.36.9
 )
 
 require (
