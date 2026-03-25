@@ -1,0 +1,16 @@
+{
+  "version": "2.0",
+  "customHandler": {
+    "description": {
+      "defaultExecutablePath": "ingestion",
+      "workingDirectory": "",
+      "arguments": []
+    },
+    "enableForwardingHttpRequest": true
+  },
+  "logging": {
+    "logLevel": {
+      "default": "Information"
+    }
+  }
+}

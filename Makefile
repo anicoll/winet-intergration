@@ -38,6 +38,10 @@ tidy:
 build:
 	go build .
 
+.PHONY: build-function-ingestion
+build-function-ingestion:
+	GOOS=linux GOARCH=amd64 go build -o functions/ingestion/ingestion ./functions/ingestion
+
 .PHONY: lint
 lint:
 	golangci-lint run ./...
