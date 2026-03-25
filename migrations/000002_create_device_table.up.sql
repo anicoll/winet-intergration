@@ -1,6 +1,6 @@
-CREATE TABLE IF NOT EXISTS Device (
-    id           	TEXT PRIMARY KEY,
-    model        	TEXT,
-    serial_number 	TEXT,
-    created_at 		TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE Device (
+    id            NVARCHAR(255)  NOT NULL PRIMARY KEY,
+    model         NVARCHAR(MAX)  NULL,
+    serial_number NVARCHAR(MAX)  NULL,
+    created_at    DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET()
 );
