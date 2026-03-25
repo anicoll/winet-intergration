@@ -1,0 +1,114 @@
+// ingestion.proto defines the IngestionService used by the local winet-integration
+// service to push sensor readings, device registrations, and Amber energy data
+// up to the cloud backend.
+//
+// The local service is the sole caller; the Azure Function is the sole server.
+// All RPCs are unary — no streaming is required at current data volumes.
+
+syntax = "proto3";
+
+package winet.v1;
+
+option go_package = "github.com/anicoll/winet-integration/gen/winet/v1;winetv1";
+
+import "google/protobuf/timestamp.proto";
+
+// IngestionService receives data from the on-premises winet-integration service
+// and persists it to Azure SQL Database.
+service IngestionService {
+  // IngestData stores a batch of normalised sensor readings (inverter properties).
+  rpc IngestData(IngestDataRequest) returns (IngestDataResponse);
+
+  // RegisterDevice upserts a WiNet device record. Called when the local service
+  // first connects to the inverter or detects a new device on the bus.
+  rpc RegisterDevice(RegisterDeviceRequest) returns (RegisterDeviceResponse);
+
+  // IngestAmberPrices stores current and forecast electricity spot prices from
+  // the Amber API. Existing rows are updated on (start_time, channel_type) conflict.
+  rpc IngestAmberPrices(IngestAmberPricesRequest) returns (IngestAmberPricesResponse);
+
+  // IngestAmberUsage stores interval energy usage records from the Amber API.
+  // Existing rows are updated on (start_time, channel_identifier) conflict.
+  rpc IngestAmberUsage(IngestAmberUsageRequest) returns (IngestAmberUsageResponse);
+}
+
+// DataPoint is a normalised sensor reading produced by the local publisher pipeline.
+// It mirrors publisher.DataPoint in internal/pkg/publisher/publisher.go.
+message DataPoint {
+  // value is the raw string representation of the reading (e.g. "3.14").
+  string value = 1;
+  // slug is a URL-safe identifier for the sensor (e.g. "battery-charge-rate").
+  string slug = 2;
+  // timestamp is when the reading was recorded on the inverter.
+  google.protobuf.Timestamp timestamp = 3;
+  // identifier is the device-scoped key for the data point (e.g. the device serial).
+  string identifier = 4;
+  // unit_of_measurement is the SI or domain unit (e.g. "W", "kWh", "V").
+  string unit_of_measurement = 5;
+}
+
+message IngestDataRequest {
+  repeated DataPoint data_points = 1;
+}
+
+message IngestDataResponse {}
+
+// RegisterDeviceRequest carries the identifying fields for a WiNet bus device.
+// It mirrors model.Device in internal/pkg/model/mqtt.go.
+message RegisterDeviceRequest {
+  // id is the device's serial number as reported by the WiNet dongle.
+  string id = 1;
+  string model = 2;
+  string serial_number = 3;
+}
+
+message RegisterDeviceResponse {}
+
+// AmberPrice is a single electricity price interval from the Amber API.
+// It mirrors db.Amberprice in internal/pkg/database/db/models.go.
+message AmberPrice {
+  // per_kwh is the total electricity price including network and market charges (c/kWh).
+  double per_kwh = 1;
+  // spot_per_kwh is the wholesale spot component only (c/kWh).
+  double spot_per_kwh = 2;
+  google.protobuf.Timestamp start_time = 3;
+  google.protobuf.Timestamp end_time = 4;
+  // duration is the interval length in minutes (typically 30).
+  int32 duration = 5;
+  // forecast indicates this is a predicted price rather than a settled one.
+  bool forecast = 6;
+  // channel_type identifies the tariff channel (e.g. "general", "feedIn").
+  string channel_type = 7;
+}
+
+message IngestAmberPricesRequest {
+  repeated AmberPrice prices = 1;
+}
+
+message IngestAmberPricesResponse {}
+
+// AmberUsage is a single energy usage interval from the Amber API.
+// It mirrors db.Amberusage in internal/pkg/database/db/models.go.
+message AmberUsage {
+  double per_kwh = 1;
+  double spot_per_kwh = 2;
+  google.protobuf.Timestamp start_time = 3;
+  google.protobuf.Timestamp end_time = 4;
+  // duration is the interval length in minutes (typically 30).
+  int32 duration = 5;
+  string channel_type = 6;
+  // channel_identifier uniquely identifies the metering channel (e.g. NMI + suffix).
+  string channel_identifier = 7;
+  // kwh is the energy consumed or exported in this interval.
+  double kwh = 8;
+  // quality is the data quality flag returned by Amber (e.g. "estimated", "actual").
+  string quality = 9;
+  // cost is the total dollar cost for this interval.
+  double cost = 10;
+}
+
+message IngestAmberUsageRequest {
+  repeated AmberUsage usage = 1;
+}
+
+message IngestAmberUsageResponse {}

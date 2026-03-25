@@ -13,8 +13,16 @@ generate-mocks:
 generate-sqlc:
 	docker run --rm -v $(shell pwd):/src -w /src sqlc/sqlc:1.28.0 generate
 
+.PHONY: buf-update
+buf-update:
+	docker run --rm -v $(shell pwd):/workspace --workdir /workspace bufbuild/buf:latest dep update
+
+.PHONY: generate-proto
+generate-proto:
+	docker run --rm -v $(shell pwd):/workspace --workdir /workspace bufbuild/buf:latest generate
+
 .PHONY: gen-all
-gen-all: generate-api generate-mocks generate-sqlc
+gen-all: generate-api generate-mocks generate-sqlc generate-proto
 
 .PHONY: test
 test:
