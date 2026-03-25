@@ -51,10 +51,3 @@ type FunctionConfig struct {
 	IngestionURL string `env:"FUNCTION_INGESTION_URL,required"`
 	APIKey       string `env:"FUNCTION_API_KEY,required"`
 }
-
-// FunctionConfig holds the Azure Function endpoint and shared API key used by
-// the gRPC publisher to forward data to the cloud ingestion function.
-type FunctionConfig struct {
-	IngestionURL string `env:"FUNCTION_INGESTION_URL,required"`
-	APIKey       string `env:"FUNCTION_API_KEY,required"`
-}
