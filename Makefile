@@ -23,24 +23,8 @@ buf-update:
 generate-proto:
 	docker run --rm -v $(shell pwd):/workspace --workdir /workspace bufbuild/buf:latest generate
 
-.PHONY: buf-update
-buf-update:
-	docker run --rm -v $(shell pwd):/workspace --workdir /workspace bufbuild/buf:latest dep update
-
-.PHONY: generate-proto
-generate-proto:
-	docker run --rm -v $(shell pwd):/workspace --workdir /workspace bufbuild/buf:latest generate
-
-.PHONY: buf-update
-buf-update:
-	docker run --rm -v $(shell pwd):/workspace --workdir /workspace bufbuild/buf:latest dep update
-
-.PHONY: generate-proto
-generate-proto:
-	docker run --rm -v $(shell pwd):/workspace --workdir /workspace bufbuild/buf:latest generate
-
 .PHONY: gen-all
-gen-all: generate-api generate-mocks generate-sqlc generate-proto
+gen-all: generate-api generate-mocks generate-proto
 
 .PHONY: test
 test:
