@@ -9,6 +9,8 @@ package grpcclient
 import (
 	"context"
 	"net/http"
+	"slices"
+	"sync"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -26,6 +28,8 @@ import (
 type Publisher struct {
 	ingestion winetv1connect.IngestionServiceClient
 	commands  winetv1connect.CommandServiceClient
+	mu        sync.RWMutex
+	deviceIDs []string
 }
 
 // New creates a Publisher that calls the ingestion function at baseURL,
@@ -65,14 +69,32 @@ func (p *Publisher) Write(ctx context.Context, data []publisher.DataPoint) error
 }
 
 // RegisterDevice implements publisher.Publisher. It upserts a device record
-// in the cloud database via the RegisterDevice RPC.
+// in the cloud database via the RegisterDevice RPC and tracks the device ID
+// for command polling.
 func (p *Publisher) RegisterDevice(ctx context.Context, device *model.Device) error {
 	_, err := p.ingestion.RegisterDevice(ctx, connect.NewRequest(&winetv1.RegisterDeviceRequest{
 		Id:           device.ID,
 		Model:        device.Model,
 		SerialNumber: device.SerialNumber,
 	}))
+	if err == nil {
+		p.mu.Lock()
+		if !slices.Contains(p.deviceIDs, device.ID) {
+			p.deviceIDs = append(p.deviceIDs, device.ID)
+		}
+		p.mu.Unlock()
+	}
 	return err
+}
+
+// DeviceIDs returns the IDs of all devices successfully registered so far.
+// Used by the command polling loop to know which devices to poll.
+func (p *Publisher) DeviceIDs() []string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	out := make([]string, len(p.deviceIDs))
+	copy(out, p.deviceIDs)
+	return out
 }
 
 // WriteAmberPrices forwards Amber electricity price intervals to the ingestion
