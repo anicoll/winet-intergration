@@ -8,7 +8,6 @@ import (
 	"math/rand/v2"
 	"os"
 	"os/signal"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -72,19 +71,6 @@ const (
 	maxConnAttempts = 10
 )
 
-// healthState holds the current winet connection status, safe for concurrent access.
-type healthState struct {
-	status atomic.Value // stores string
-}
-
-func (h *healthState) set(s string) { h.status.Store(s) }
-func (h *healthState) get() string {
-	if v := h.status.Load(); v != nil {
-		return v.(string)
-	}
-	return "starting"
-}
-
 // reconnectBackoff returns the wait duration for the given attempt (0-indexed)
 // using exponential backoff (base×2^attempt, capped at backoffMax) plus ±20% jitter.
 func reconnectBackoff(attempt int) time.Duration {
@@ -132,9 +118,6 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	feedinCtrl := feedin.New(winetSvc, loc)
 	winetSvc.SetDeviceStatusHook(feedinCtrl.UpdateFromStatuses)
 
-	health := &healthState{}
-	health.set("starting")
-
 	eg, ctx := errgroup.WithContext(ctx)
 
 	// Start amber price processing service
@@ -149,7 +132,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	// Start winet service with retry logic
 	eg.Go(func() error {
-		return startWinetService(ctx, winetSvc, health, logger)
+		return startWinetService(ctx, winetSvc, logger)
 	})
 
 	// Start command polling loop
@@ -324,20 +307,18 @@ type winetSvc interface {
 	Events() <-chan winet.SessionEvent
 }
 
-func startWinetService(ctx context.Context, winetSvc winetSvc, health *healthState, logger *zap.Logger) error {
+func startWinetService(ctx context.Context, winetSvc winetSvc, logger *zap.Logger) error {
 	logger.Info("Starting winet service")
 	consecutiveFails := 0
 
 	for {
 		select {
 		case <-ctx.Done():
-			health.set("disconnected")
 			logger.Info("Winet service stopped")
 			return ctx.Err()
 		default:
 		}
 
-		health.set("reconnecting")
 		if err := winetSvc.Connect(ctx); err != nil {
 			consecutiveFails++
 			backoff := reconnectBackoff(consecutiveFails - 1)
@@ -347,12 +328,10 @@ func startWinetService(ctx context.Context, winetSvc winetSvc, health *healthSta
 				zap.Duration("backoff", backoff),
 			)
 			if consecutiveFails >= maxConnAttempts {
-				health.set("disconnected")
 				return fmt.Errorf("winet: exceeded %d consecutive connection failures: %w", maxConnAttempts, err)
 			}
 			select {
 			case <-ctx.Done():
-				health.set("disconnected")
 				return ctx.Err()
 			case <-time.After(backoff):
 			}
@@ -360,7 +339,6 @@ func startWinetService(ctx context.Context, winetSvc winetSvc, health *healthSta
 		}
 
 		consecutiveFails = 0
-		health.set("connected")
 		logger.Info("Winet service connected successfully")
 
 		// Wait for a session event or context cancellation
@@ -373,7 +351,6 @@ func startWinetService(ctx context.Context, winetSvc winetSvc, health *healthSta
 			logger.Error("winet service error", zap.Error(event.Err))
 			return event.Err
 		case <-ctx.Done():
-			health.set("disconnected")
 			logger.Info("Winet service stopped")
 			return ctx.Err()
 		}
