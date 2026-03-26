@@ -3,8 +3,8 @@ CREATE TABLE Property (
     time_stamp          DATETIMEOFFSET     NOT NULL,
     unit_of_measurement NVARCHAR(MAX)      NOT NULL,
     value               NVARCHAR(MAX)      NOT NULL,
-    identifier          NVARCHAR(MAX)      NOT NULL,
-    slug                NVARCHAR(MAX)      NOT NULL
+    identifier          NVARCHAR(255)      NOT NULL,
+    slug                NVARCHAR(255)      NOT NULL
 );
 
 CREATE INDEX idx_properties_identifier ON Property (identifier);

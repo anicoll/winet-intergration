@@ -2,7 +2,7 @@
   "version": "2.0",
   "customHandler": {
     "description": {
-      "defaultExecutablePath": "api",
+      "defaultExecutablePath": "api/api",
       "workingDirectory": "",
       "arguments": []
     },
