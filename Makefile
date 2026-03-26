@@ -42,6 +42,13 @@ build:
 build-function-ingestion:
 	GOOS=linux GOARCH=amd64 go build -o functions/ingestion/ingestion ./functions/ingestion
 
+.PHONY: build-function-api
+build-function-api:
+	GOOS=linux GOARCH=amd64 go build -o functions/api/api ./functions/api
+
+.PHONY: build-functions
+build-functions: build-function-ingestion build-function-api
+
 .PHONY: lint
 lint:
 	golangci-lint run ./...

@@ -10,6 +10,7 @@ packages:
     interfaces:
       AmberUsageFetcher:
       AmberUsageWriter:
+      AmberPricesWriter:
   github.com/anicoll/winet-integration/pkg/sockets:
     config:
       dir: "mocks/sockets"

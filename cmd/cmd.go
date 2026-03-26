@@ -6,34 +6,26 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
-	"net/http"
 	"os"
 	"os/signal"
-	"slices"
-	"sync/atomic"
 	"syscall"
 	"time"
 
 	paho_mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/golang-migrate/migrate/v4"
-	"github.com/jackc/pgx/v5/pgxpool"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
+	winetv1 "github.com/anicoll/winet-integration/gen/winet/v1"
 	"github.com/anicoll/winet-integration/internal/pkg/amber"
-	"github.com/anicoll/winet-integration/internal/pkg/auth"
 	"github.com/anicoll/winet-integration/internal/pkg/config"
-	"github.com/anicoll/winet-integration/internal/pkg/database"
 	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
-	"github.com/anicoll/winet-integration/internal/pkg/database/migration"
 	"github.com/anicoll/winet-integration/internal/pkg/feedin"
+	"github.com/anicoll/winet-integration/internal/pkg/grpcclient"
 	"github.com/anicoll/winet-integration/internal/pkg/mqtt"
 	"github.com/anicoll/winet-integration/internal/pkg/publisher"
-	"github.com/anicoll/winet-integration/internal/pkg/server"
 	"github.com/anicoll/winet-integration/internal/pkg/winet"
-	api "github.com/anicoll/winet-integration/pkg/server"
 )
 
 var errCron = errors.New("cron error")
@@ -46,41 +38,38 @@ type AmberUsageWriter interface {
 	WriteAmberUsage(ctx context.Context, usage []dbpkg.Amberusage) error
 }
 
-const (
-	// Server configuration
-	serverAddr         = "0.0.0.0:8000"
-	serverWriteTimeout = 5 * time.Second
-	serverReadTimeout  = 5 * time.Second
+type AmberPricesWriter interface {
+	WriteAmberPrices(ctx context.Context, prices []dbpkg.Amberprice) error
+}
 
+type commandExecutor interface {
+	SendSelfConsumptionCommand() (bool, error)
+	SendBatteryStopCommand() (bool, error)
+	SetFeedInLimitation(feedinLimited bool) (bool, error)
+	SendDischargeCommand(dischargePower string) (bool, error)
+	SendChargeCommand(chargePower string) (bool, error)
+	SendInverterStateChangeCommand(disable bool) (bool, error)
+}
+
+const (
 	// Channel buffer sizes
 	errorChannelBuffer = 1000
 
 	// Cron schedules
-	dbCleanupSchedule   = "CRON_TZ=Australia/Adelaide 0 3 * * *"
 	priceUpdateSchedule = "CRON_TZ=Australia/Adelaide */5 * * * *"
 	usageUpdateSchedule = "CRON_TZ=Australia/Adelaide 0 8 * * *"
 
 	// Delays
 	priceUpdateDelay = 5 * time.Second
 
+	// Command polling
+	commandPollInterval = 30 * time.Second
+
 	// Reconnect backoff
 	backoffBase     = 5 * time.Second
 	backoffMax      = 5 * time.Minute
 	maxConnAttempts = 10
 )
-
-// healthState holds the current winet connection status, safe for concurrent access.
-type healthState struct {
-	status atomic.Value // stores string
-}
-
-func (h *healthState) set(s string) { h.status.Store(s) }
-func (h *healthState) get() string {
-	if v := h.status.Load(); v != nil {
-		return v.(string)
-	}
-	return "starting"
-}
 
 // reconnectBackoff returns the wait duration for the given attempt (0-indexed)
 // using exponential backoff (base×2^attempt, capped at backoffMax) plus ±20% jitter.
@@ -101,16 +90,8 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		return fmt.Errorf("failed to setup logger: %w", err)
 	}
 	defer func() {
-		_ = logger.Sync() // flushes buffer, if any.
+		_ = logger.Sync()
 	}()
-
-	// Initialize database connection
-	db, cleanup, err := setupDatabase(ctx, cfg.DBDSN, cfg.MigrationsFolder)
-	if err != nil {
-		return fmt.Errorf("failed to setup database: %w", err)
-	}
-
-	defer cleanup()
 
 	mqttOpts := paho_mqtt.NewClientOptions()
 	mqttOpts.SetPassword(cfg.MqttCfg.Password)
@@ -122,10 +103,9 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		return fmt.Errorf("failed to connect to MQTT broker: %w", err)
 	}
 
-	pub := publisher.NewMultiPublisher(db, mqttPublisher)
+	grpcPub := grpcclient.New(cfg.FunctionCfg.IngestionURL, cfg.FunctionCfg.APIKey)
 
-	authSvc := auth.NewService(cfg.AuthCfg.JWTSecret, cfg.AuthCfg.AccessTokenTTL, cfg.AuthCfg.RefreshTokenTTL, db, db)
-	authSvc.StartCleanup(ctx, time.Hour)
+	pub := publisher.NewMultiPublisher(grpcPub, mqttPublisher)
 
 	errorChan := make(chan error, errorChannelBuffer)
 	winetSvc := winet.New(&cfg.WinetCfg, pub, errorChan)
@@ -138,38 +118,26 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	feedinCtrl := feedin.New(winetSvc, loc)
 	winetSvc.SetDeviceStatusHook(feedinCtrl.UpdateFromStatuses)
 
-	health := &healthState{}
-	health.set("starting")
-
 	eg, ctx := errgroup.WithContext(ctx)
-
-	// // Start database cleanup service
-	// eg.Go(func() error {
-	// 	return startDbCleanupService(ctx, db, errorChan, logger)
-	// })
 
 	// Start amber price processing service
 	eg.Go(func() error {
-		return startAmberPriceService(ctx, &cfg.AmberCfg, db, errorChan, logger, feedinCtrl.Evaluate)
+		return startAmberPriceService(ctx, &cfg.AmberCfg, grpcPub, errorChan, logger, feedinCtrl.Evaluate)
 	})
 
 	// Start amber usage processing service
 	eg.Go(func() error {
-		return startAmberUsageService(ctx, &cfg.AmberCfg, db, errorChan, logger)
+		return startAmberUsageService(ctx, &cfg.AmberCfg, grpcPub, errorChan, logger)
 	})
 
 	// Start winet service with retry logic
 	eg.Go(func() error {
-		return startWinetService(ctx, winetSvc, health, logger)
+		return startWinetService(ctx, winetSvc, logger)
 	})
-	// Start decision logic service.
-	// eg.Go(func() error {
-	// 	return startDecisionService(ctx, winetSvc, db, errorChan, logger)
-	// })
 
-	// Start HTTP server
+	// Start command polling loop
 	eg.Go(func() error {
-		return startHTTPServer(ctx, winetSvc, db, authSvc, health, cfg.AllowedOrigins, cfg.AuthCfg.SecureCookies, logger)
+		return startCommandPollingService(ctx, grpcPub, winetSvc, logger)
 	})
 
 	// Start error handler
@@ -200,24 +168,7 @@ func setupLogger(logLevel string) (*zap.Logger, error) {
 	return logger, nil
 }
 
-func setupDatabase(ctx context.Context, dsn, migrationsPath string) (*database.Database, func(), error) {
-	err := migration.Migrate(dsn, migrationsPath)
-	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return nil, nil, fmt.Errorf("failed to run migrations: %w", err)
-	}
-
-	pool, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		return nil, nil, err
-	}
-	if err := pool.Ping(ctx); err != nil {
-		return nil, nil, fmt.Errorf("failed to connect to database: %w", err)
-	}
-
-	return database.NewDatabase(pool), pool.Close, nil
-}
-
-func startAmberPriceService(ctx context.Context, amberCfg *config.AmberConfig, db *database.Database, errChan chan error, logger *zap.Logger, onPriceUpdate func([]dbpkg.Amberprice)) error {
+func startAmberPriceService(ctx context.Context, amberCfg *config.AmberConfig, db AmberPricesWriter, errChan chan error, logger *zap.Logger, onPriceUpdate func([]dbpkg.Amberprice)) error {
 	logger.Info("Starting amber price service")
 
 	if amberCfg == nil || amberCfg.Host == "" || amberCfg.Token == "" {
@@ -271,7 +222,7 @@ func startAmberPriceService(ctx context.Context, amberCfg *config.AmberConfig, d
 	return ctx.Err()
 }
 
-func startAmberUsageService(ctx context.Context, amberCfg *config.AmberConfig, db *database.Database, errChan chan error, logger *zap.Logger) error {
+func startAmberUsageService(ctx context.Context, amberCfg *config.AmberConfig, db AmberUsageWriter, errChan chan error, logger *zap.Logger) error {
 	logger.Info("Starting amber usage service")
 
 	if amberCfg == nil || amberCfg.Host == "" || amberCfg.Token == "" {
@@ -337,7 +288,7 @@ func fetchAndStoreUsage(ctx context.Context, svc AmberUsageFetcher, db AmberUsag
 
 func fetchAndStorePrices(ctx context.Context, svc interface {
 	GetPrices(ctx context.Context, siteID string) ([]dbpkg.Amberprice, error)
-}, db *database.Database, siteId string,
+}, db AmberPricesWriter, siteId string,
 ) ([]dbpkg.Amberprice, error) {
 	prices, err := svc.GetPrices(ctx, siteId)
 	if err != nil {
@@ -356,20 +307,18 @@ type winetSvc interface {
 	Events() <-chan winet.SessionEvent
 }
 
-func startWinetService(ctx context.Context, winetSvc winetSvc, health *healthState, logger *zap.Logger) error {
+func startWinetService(ctx context.Context, winetSvc winetSvc, logger *zap.Logger) error {
 	logger.Info("Starting winet service")
 	consecutiveFails := 0
 
 	for {
 		select {
 		case <-ctx.Done():
-			health.set("disconnected")
 			logger.Info("Winet service stopped")
 			return ctx.Err()
 		default:
 		}
 
-		health.set("reconnecting")
 		if err := winetSvc.Connect(ctx); err != nil {
 			consecutiveFails++
 			backoff := reconnectBackoff(consecutiveFails - 1)
@@ -379,12 +328,10 @@ func startWinetService(ctx context.Context, winetSvc winetSvc, health *healthSta
 				zap.Duration("backoff", backoff),
 			)
 			if consecutiveFails >= maxConnAttempts {
-				health.set("disconnected")
 				return fmt.Errorf("winet: exceeded %d consecutive connection failures: %w", maxConnAttempts, err)
 			}
 			select {
 			case <-ctx.Done():
-				health.set("disconnected")
 				return ctx.Err()
 			case <-time.After(backoff):
 			}
@@ -392,7 +339,6 @@ func startWinetService(ctx context.Context, winetSvc winetSvc, health *healthSta
 		}
 
 		consecutiveFails = 0
-		health.set("connected")
 		logger.Info("Winet service connected successfully")
 
 		// Wait for a session event or context cancellation
@@ -405,70 +351,65 @@ func startWinetService(ctx context.Context, winetSvc winetSvc, health *healthSta
 			logger.Error("winet service error", zap.Error(event.Err))
 			return event.Err
 		case <-ctx.Done():
-			health.set("disconnected")
 			logger.Info("Winet service stopped")
 			return ctx.Err()
 		}
 	}
 }
 
-func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db *database.Database, authSvc *auth.Service, health *healthState, allowedOrigins []string, secureCookies bool, logger *zap.Logger) error {
-	logger.Info("Starting HTTP server", zap.String("addr", serverAddr))
-
-	apiHandler := api.HandlerWithOptions(server.New(winetSvc, db, authSvc, secureCookies), api.StdHTTPServerOptions{
-		Middlewares: []api.MiddlewareFunc{server.TimeoutMiddleware, server.LoggingMiddleware(allowedOrigins), server.AuthMiddleware(authSvc)},
-		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
-			logger.Error("HTTP handler error", zap.Error(err))
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		},
-	})
-
-	mux := http.NewServeMux()
-	mux.Handle("/", apiHandler)
-	mux.HandleFunc("OPTIONS /", func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		if slices.Contains(allowedOrigins, origin) {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+func startCommandPollingService(ctx context.Context, pub *grpcclient.Publisher, exec commandExecutor, logger *zap.Logger) error {
+	logger.Info("Starting command polling service")
+	ticker := time.NewTicker(commandPollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Info("Command polling service stopped")
+			return ctx.Err()
+		case <-ticker.C:
+			pollAndDispatchCommands(ctx, pub, exec, logger)
 		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"status":%q}`, health.get())
-	})
-
-	srv := &http.Server{
-		Handler:      mux,
-		Addr:         serverAddr,
-		WriteTimeout: serverWriteTimeout,
-		ReadTimeout:  serverReadTimeout,
 	}
+}
 
-	// Start server in a goroutine
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("HTTP server error", zap.Error(err))
+func pollAndDispatchCommands(ctx context.Context, pub *grpcclient.Publisher, exec commandExecutor, logger *zap.Logger) {
+	for _, deviceID := range pub.DeviceIDs() {
+		cmds, err := pub.GetPendingCommands(ctx, deviceID)
+		if err != nil {
+			logger.Error("GetPendingCommands failed", zap.String("device", deviceID), zap.Error(err))
+			continue
 		}
-	}()
-
-	// Wait for context cancellation
-	<-ctx.Done()
-
-	// Graceful shutdown
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	logger.Info("Shutting down HTTP server gracefully")
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		logger.Error("HTTP server shutdown error", zap.Error(err))
-		return err
+		for _, cmd := range cmds {
+			success, dispatchErr := dispatchCommand(exec, cmd)
+			if dispatchErr != nil {
+				logger.Error("command dispatch failed", zap.String("id", cmd.Id), zap.Error(dispatchErr))
+			}
+			if ackErr := pub.AckCommand(ctx, cmd.Id, success && dispatchErr == nil); ackErr != nil {
+				logger.Error("AckCommand failed", zap.String("id", cmd.Id), zap.Error(ackErr))
+			}
+		}
 	}
+}
 
-	logger.Info("HTTP server stopped")
-	return ctx.Err()
+func dispatchCommand(exec commandExecutor, cmd *winetv1.InverterCommand) (bool, error) {
+	switch c := cmd.Command.(type) {
+	case *winetv1.InverterCommand_SelfConsumption:
+		_ = c
+		return exec.SendSelfConsumptionCommand()
+	case *winetv1.InverterCommand_BatteryStop:
+		_ = c
+		return exec.SendBatteryStopCommand()
+	case *winetv1.InverterCommand_Discharge:
+		return exec.SendDischargeCommand(c.Discharge.DischargePower)
+	case *winetv1.InverterCommand_Charge:
+		return exec.SendChargeCommand(c.Charge.ChargePower)
+	case *winetv1.InverterCommand_InverterStateChange:
+		return exec.SendInverterStateChangeCommand(c.InverterStateChange.Disable)
+	case *winetv1.InverterCommand_SetFeedInLimitation:
+		return exec.SetFeedInLimitation(c.SetFeedInLimitation.Limited)
+	default:
+		return false, fmt.Errorf("unknown command type %T", cmd.Command)
+	}
 }
 
 func handleErrors(ctx context.Context, errorChan chan error, logger *zap.Logger) error {
