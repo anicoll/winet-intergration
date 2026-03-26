@@ -23,14 +23,6 @@ buf-update:
 generate-proto:
 	docker run --rm -v $(shell pwd):/workspace --workdir /workspace bufbuild/buf:latest generate
 
-.PHONY: buf-update
-buf-update:
-	docker run --rm -v $(shell pwd):/workspace --workdir /workspace bufbuild/buf:latest dep update
-
-.PHONY: generate-proto
-generate-proto:
-	docker run --rm -v $(shell pwd):/workspace --workdir /workspace bufbuild/buf:latest generate
-
 .PHONY: gen-all
 gen-all: generate-api generate-mocks generate-proto
 
@@ -45,6 +37,10 @@ tidy:
 .PHONY: build
 build:
 	go build .
+
+.PHONY: build-function-ingestion
+build-function-ingestion:
+	GOOS=linux GOARCH=amd64 go build -o functions/ingestion/ingestion ./functions/ingestion
 
 .PHONY: lint
 lint:
