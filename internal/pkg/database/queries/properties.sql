@@ -1,20 +1,25 @@
 -- name: InsertProperty :one
 INSERT INTO Property (time_stamp, unit_of_measurement, value, identifier, slug)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, time_stamp, unit_of_measurement, value, identifier, slug;
+OUTPUT INSERTED.id, INSERTED.time_stamp, INSERTED.unit_of_measurement, INSERTED.value, INSERTED.identifier, INSERTED.slug
+VALUES (@p1, @p2, @p3, @p4, @p5);
 
 -- name: GetProperties :many
 SELECT id, time_stamp, unit_of_measurement, value, identifier, slug
 FROM Property
-WHERE identifier = $1 AND slug = $2 AND time_stamp BETWEEN $3 AND $4
+WHERE identifier = @p1
+  AND slug       = @p2
+  AND time_stamp BETWEEN @p3 AND @p4
 ORDER BY time_stamp DESC;
 
 -- name: GetLatestProperties :many
-SELECT DISTINCT ON (identifier, slug)
-    id, time_stamp, unit_of_measurement, value, identifier, slug
-FROM Property
-WHERE time_stamp > NOW() - INTERVAL '1 day'
-ORDER BY identifier, slug, time_stamp DESC;
+SELECT id, time_stamp, unit_of_measurement, value, identifier, slug
+FROM (
+    SELECT id, time_stamp, unit_of_measurement, value, identifier, slug,
+           ROW_NUMBER() OVER (PARTITION BY identifier, slug ORDER BY time_stamp DESC) AS rn
+    FROM Property
+    WHERE time_stamp > DATEADD(day, -1, SYSDATETIMEOFFSET())
+) t
+WHERE rn = 1;
 
 -- name: CleanupProperties :exec
-DELETE FROM Property WHERE time_stamp < $1;
+DELETE FROM Property WHERE time_stamp < @p1;

@@ -1,15 +1,25 @@
 -- name: UpsertAmberPrice :exec
-INSERT INTO AmberPrice (per_kwh, spot_per_kwh, start_time, end_time, duration, forecast, channel_type)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (start_time, channel_type) DO UPDATE
-SET per_kwh      = EXCLUDED.per_kwh,
-    spot_per_kwh = EXCLUDED.spot_per_kwh,
-    duration     = EXCLUDED.duration,
-    forecast     = EXCLUDED.forecast,
-    updated_at   = NOW();
+MERGE AmberPrice AS target
+USING (
+    SELECT @p1 AS per_kwh, @p2 AS spot_per_kwh, @p3 AS start_time,
+           @p4 AS end_time, @p5 AS duration, @p6 AS forecast, @p7 AS channel_type
+) AS source
+ON target.start_time = source.start_time AND target.channel_type = source.channel_type
+WHEN MATCHED THEN
+    UPDATE SET
+        per_kwh      = source.per_kwh,
+        spot_per_kwh = source.spot_per_kwh,
+        duration     = source.duration,
+        forecast     = source.forecast,
+        updated_at   = SYSDATETIMEOFFSET()
+WHEN NOT MATCHED THEN
+    INSERT (per_kwh, spot_per_kwh, start_time, end_time, duration, forecast, channel_type)
+    VALUES (source.per_kwh, source.spot_per_kwh, source.start_time, source.end_time,
+            source.duration, source.forecast, source.channel_type);
 
 -- name: GetAmberPrices :many
-SELECT id, per_kwh, spot_per_kwh, start_time, end_time, duration, forecast, channel_type, created_at, updated_at
+SELECT id, per_kwh, spot_per_kwh, start_time, end_time, duration, forecast,
+       channel_type, created_at, updated_at
 FROM AmberPrice
-WHERE start_time BETWEEN $1 AND $2
+WHERE start_time BETWEEN @p1 AND @p2
 ORDER BY start_time DESC;

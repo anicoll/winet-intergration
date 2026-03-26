@@ -1,5 +1,9 @@
 -- name: GetUserByUsername :one
-SELECT * FROM users WHERE username = $1 LIMIT 1;
+SELECT TOP 1 id, username, password_hash, created_at, updated_at
+FROM users
+WHERE username = @p1;
 
 -- name: CreateUser :one
-INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING *;
+INSERT INTO users (username, password_hash)
+OUTPUT INSERTED.id, INSERTED.username, INSERTED.password_hash, INSERTED.created_at, INSERTED.updated_at
+VALUES (@p1, @p2);

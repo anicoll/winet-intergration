@@ -1,7 +1,8 @@
-CREATE TABLE IF NOT EXISTS refresh_tokens (
-    token_hash  TEXT PRIMARY KEY,
-    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    username    TEXT NOT NULL,
-    expires_at  TIMESTAMP WITH TIME ZONE NOT NULL,
-    created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE refresh_tokens (
+    token_hash NVARCHAR(255)  NOT NULL PRIMARY KEY,
+    user_id    INT            NOT NULL,
+    username   NVARCHAR(255)  NOT NULL,
+    expires_at DATETIMEOFFSET NOT NULL,
+    created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+    CONSTRAINT fk_refresh_tokens_users FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
