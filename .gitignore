@@ -31,3 +31,8 @@ mosquitto/data/*
 mosquitto/log/*
 __debug_bin**
 winet-integration
+
+# Build artifacts
+.build/
+functions/api/api
+functions/ingestion/ingestion
