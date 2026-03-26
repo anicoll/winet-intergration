@@ -12,6 +12,7 @@ type Config struct {
 	MqttCfg          MQTTConfig
 	AmberCfg         AmberConfig
 	AuthCfg          AuthConfig
+	FunctionCfg      FunctionConfig
 	LogLevel         string   `env:"LOG_LEVEL"          envDefault:"info"`
 	DBDSN            string   `env:"DATABASE_URL,required"`
 	MigrationsFolder string   `env:"MIGRATIONS_FOLDER"  envDefault:"migrations"`
@@ -53,4 +54,11 @@ type AuthConfig struct {
 	AccessTokenTTL  time.Duration `env:"JWT_ACCESS_TTL"   envDefault:"15m"`
 	RefreshTokenTTL time.Duration `env:"JWT_REFRESH_TTL"  envDefault:"720h"`
 	SecureCookies   bool          `env:"SECURE_COOKIES"   envDefault:"true"`
+}
+
+// FunctionConfig holds the Azure Function endpoint and shared API key used by
+// the gRPC publisher to forward data to the cloud ingestion function.
+type FunctionConfig struct {
+	IngestionURL string `env:"FUNCTION_INGESTION_URL,required"`
+	APIKey       string `env:"FUNCTION_API_KEY,required"`
 }

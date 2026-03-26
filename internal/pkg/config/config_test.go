@@ -31,6 +31,8 @@ func setRequiredEnv(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://localhost/test")
 	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough-32c")
 	t.Setenv("ALLOWED_ORIGIN", "http://localhost:5173")
+	t.Setenv("FUNCTION_INGESTION_URL", "https://example.azurewebsites.net")
+	t.Setenv("FUNCTION_API_KEY", "test-api-key")
 }
 
 func TestLoad_Success(t *testing.T) {
