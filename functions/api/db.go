@@ -43,7 +43,7 @@ func (s *store) GetLatestProperties(ctx context.Context) (iter.Seq[dbpkg.Propert
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var props []dbpkg.Property
 	for rows.Next() {
@@ -83,7 +83,7 @@ func (s *store) GetProperties(ctx context.Context, identifier, slug string, from
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var props []dbpkg.Property
 	for rows.Next() {
@@ -111,7 +111,7 @@ func (s *store) GetAmberPrices(ctx context.Context, from, to time.Time, _ *strin
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var prices []dbpkg.Amberprice
 	for rows.Next() {
@@ -146,7 +146,7 @@ func (s *store) GetAmberUsage(ctx context.Context, from, to time.Time) ([]dbpkg.
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var usage []dbpkg.Amberusage
 	for rows.Next() {

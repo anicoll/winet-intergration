@@ -27,7 +27,7 @@ func (c *commandStore) insertCommand(commandType string, payload any) (bool, err
 	if err != nil {
 		return false, fmt.Errorf("marshal command payload: %w", err)
 	}
-	_, err = c.db.Exec(insertPendingCommand,
+	_, err = c.db.Exec(insertPendingCommand, //nolint:noctx
 		sql.Named("p1", c.deviceID),
 		sql.Named("p2", commandType),
 		sql.Named("p3", string(p)),
