@@ -212,7 +212,7 @@ ORDER BY created_at ASC`
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var result []pendingCommandRow
 	for rows.Next() {

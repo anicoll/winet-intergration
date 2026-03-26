@@ -48,7 +48,7 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to open database connection", zap.Error(err))
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
