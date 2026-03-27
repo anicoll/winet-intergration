@@ -105,7 +105,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	grpcPub := grpcclient.New(cfg.FunctionCfg.IngestionURL, cfg.FunctionCfg.APIKey)
 
-	pub := publisher.NewMultiPublisher(grpcPub, mqttPublisher)
+	pub := publisher.NewMultiPublisher(grpcPub)
 
 	errorChan := make(chan error, errorChannelBuffer)
 	winetSvc := winet.New(&cfg.WinetCfg, pub, errorChan)
@@ -121,14 +121,14 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	eg, ctx := errgroup.WithContext(ctx)
 
 	// Start amber price processing service
-	eg.Go(func() error {
-		return startAmberPriceService(ctx, &cfg.AmberCfg, grpcPub, errorChan, logger, feedinCtrl.Evaluate)
-	})
+	// eg.Go(func() error {
+	// 	return startAmberPriceService(ctx, &cfg.AmberCfg, grpcPub, errorChan, logger, feedinCtrl.Evaluate)
+	// })
 
 	// Start amber usage processing service
-	eg.Go(func() error {
-		return startAmberUsageService(ctx, &cfg.AmberCfg, grpcPub, errorChan, logger)
-	})
+	// eg.Go(func() error {
+	// 	return startAmberUsageService(ctx, &cfg.AmberCfg, grpcPub, errorChan, logger)
+	// })
 
 	// Start winet service with retry logic
 	eg.Go(func() error {
