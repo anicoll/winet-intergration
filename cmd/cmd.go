@@ -353,4 +353,3 @@ func handleErrors(ctx context.Context, errorChan chan error, logger *zap.Logger)
 		}
 	}
 }
-
