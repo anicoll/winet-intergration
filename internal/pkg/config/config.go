@@ -8,10 +8,9 @@ import (
 
 // Config holds all application configuration populated from environment variables.
 type Config struct {
-	WinetCfg WinetConfig
-	MqttCfg  MQTTConfig
-	AmberCfg AmberConfig
-	// FunctionCfg FunctionConfig
+	WinetCfg    WinetConfig
+	MqttCfg     MQTTConfig
+	AmberCfg    AmberConfig
 	DatabaseCfg DatabaseConfig
 	LogLevel    string `env:"LOG_LEVEL" envDefault:"info"`
 	Timezone    string `env:"TIMEZONE"  envDefault:"Australia/Adelaide"`
@@ -44,13 +43,6 @@ type MQTTConfig struct {
 type AmberConfig struct {
 	Host  string `env:"AMBER_HOST"`
 	Token string `env:"AMBER_TOKEN"`
-}
-
-// FunctionConfig holds the Azure Function endpoint and shared API key used by
-// the gRPC publisher to forward data to the cloud ingestion function.
-type FunctionConfig struct {
-	IngestionURL string `env:"FUNCTION_INGESTION_URL,required"`
-	APIKey       string `env:"FUNCTION_API_KEY,required"`
 }
 
 // DatabaseConfig holds the Azure SQL Server connection string for direct DB writes.

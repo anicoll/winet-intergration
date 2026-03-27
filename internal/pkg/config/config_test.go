@@ -28,8 +28,6 @@ func setRequiredEnv(t *testing.T) {
 	t.Setenv("WINET_HOST", "192.168.1.1")
 	t.Setenv("WINET_USERNAME", "admin")
 	t.Setenv("WINET_PASSWORD", "secret")
-	t.Setenv("FUNCTION_INGESTION_URL", "https://example.azurewebsites.net")
-	t.Setenv("FUNCTION_API_KEY", "test-api-key")
 }
 
 func TestLoad_Success(t *testing.T) {
@@ -41,8 +39,6 @@ func TestLoad_Success(t *testing.T) {
 	assert.Equal(t, "192.168.1.1", cfg.WinetCfg.Host)
 	assert.Equal(t, "admin", cfg.WinetCfg.Username)
 	assert.Equal(t, "secret", cfg.WinetCfg.Password)
-	// assert.Equal(t, "https://example.azurewebsites.net", cfg.FunctionCfg.IngestionURL)
-	// assert.Equal(t, "test-api-key", cfg.FunctionCfg.APIKey)
 }
 
 func TestLoad_Defaults(t *testing.T) {
