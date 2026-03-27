@@ -17,13 +17,6 @@ jobs:
           cache: true
           go-version-file: go.mod
 
-      - uses: bufbuild/buf-setup-action@v1
-        with:
-          github_token: ${{ github.token }}
-
-      - name: Generate protos
-        run: buf generate
-
       - name: Build
         run: make build
 
