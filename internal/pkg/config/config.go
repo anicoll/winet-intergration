@@ -8,10 +8,11 @@ import (
 
 // Config holds all application configuration populated from environment variables.
 type Config struct {
-	WinetCfg    WinetConfig
-	MqttCfg     MQTTConfig
-	AmberCfg    AmberConfig
-	FunctionCfg FunctionConfig
+	WinetCfg WinetConfig
+	MqttCfg  MQTTConfig
+	AmberCfg AmberConfig
+	// FunctionCfg FunctionConfig
+	DatabaseCfg DatabaseConfig
 	LogLevel    string `env:"LOG_LEVEL" envDefault:"info"`
 	Timezone    string `env:"TIMEZONE"  envDefault:"Australia/Adelaide"`
 }
@@ -50,4 +51,9 @@ type AmberConfig struct {
 type FunctionConfig struct {
 	IngestionURL string `env:"FUNCTION_INGESTION_URL,required"`
 	APIKey       string `env:"FUNCTION_API_KEY,required"`
+}
+
+// DatabaseConfig holds the Azure SQL Server connection string for direct DB writes.
+type DatabaseConfig struct {
+	URL string `env:"DATABASE_URL"`
 }
