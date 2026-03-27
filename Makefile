@@ -1,3 +1,5 @@
+include functions/functions.mk
+
 .PHONY: generate-api
 generate-api:
 	mkdir -p ./pkg/server
@@ -9,12 +11,22 @@ generate-mocks:
 	find mocks -mindepth 1 -name '*.go' -delete
 	docker run --rm -v $(shell pwd):/src -w /src vektra/mockery:3
 
-.PHONY: generate-sqlc
-generate-sqlc:
-	docker run --rm -v $(shell pwd):/src -w /src sqlc/sqlc:1.28.0 generate
+## generate-sqlc is intentionally removed: sqlc does not support SQL Server.
+## The queries in internal/pkg/database/queries/ are now T-SQL (Azure SQL).
+## The Azure Function DB layer will be written manually using database/sql.
+## The existing generated code in internal/pkg/database/db/ remains committed
+## until the local service DB dependency is removed in the wiring step.
+
+.PHONY: buf-update
+buf-update:
+	docker run --rm -v $(shell pwd):/workspace --workdir /workspace bufbuild/buf:latest dep update
+
+.PHONY: generate-proto
+generate-proto:
+	docker run --rm -v $(shell pwd):/workspace --workdir /workspace bufbuild/buf:latest generate
 
 .PHONY: gen-all
-gen-all: generate-api generate-mocks generate-sqlc
+gen-all: generate-api generate-mocks generate-proto
 
 .PHONY: test
 test:

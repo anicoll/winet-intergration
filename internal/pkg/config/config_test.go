@@ -28,9 +28,6 @@ func setRequiredEnv(t *testing.T) {
 	t.Setenv("WINET_HOST", "192.168.1.1")
 	t.Setenv("WINET_USERNAME", "admin")
 	t.Setenv("WINET_PASSWORD", "secret")
-	t.Setenv("DATABASE_URL", "postgres://localhost/test")
-	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough-32c")
-	t.Setenv("ALLOWED_ORIGIN", "http://localhost:5173")
 }
 
 func TestLoad_Success(t *testing.T) {
@@ -42,7 +39,6 @@ func TestLoad_Success(t *testing.T) {
 	assert.Equal(t, "192.168.1.1", cfg.WinetCfg.Host)
 	assert.Equal(t, "admin", cfg.WinetCfg.Username)
 	assert.Equal(t, "secret", cfg.WinetCfg.Password)
-	assert.Equal(t, "postgres://localhost/test", cfg.DBDSN)
 }
 
 func TestLoad_Defaults(t *testing.T) {
@@ -52,7 +48,6 @@ func TestLoad_Defaults(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "info", cfg.LogLevel)
-	assert.Equal(t, "migrations", cfg.MigrationsFolder)
 	assert.Equal(t, "Australia/Adelaide", cfg.Timezone)
 	assert.Equal(t, 30*time.Second, cfg.WinetCfg.PollInterval)
 	assert.False(t, cfg.WinetCfg.Ssl)
@@ -82,14 +77,6 @@ func TestLoad_MissingWinetPassword(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestLoad_MissingDatabaseURL(t *testing.T) {
-	setRequiredEnv(t)
-	unsetenv(t, "DATABASE_URL")
-
-	_, err := Load()
-	assert.Error(t, err)
-}
-
 func TestLoad_CustomValues(t *testing.T) {
 	setRequiredEnv(t)
 	t.Setenv("LOG_LEVEL", "debug")
@@ -101,7 +88,6 @@ func TestLoad_CustomValues(t *testing.T) {
 	t.Setenv("MQTT_PASSWORD", "mqttpass")
 	t.Setenv("AMBER_HOST", "https://api.amber.com")
 	t.Setenv("AMBER_TOKEN", "tok123")
-	t.Setenv("MIGRATIONS_FOLDER", "/custom/migrations")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -115,5 +101,4 @@ func TestLoad_CustomValues(t *testing.T) {
 	assert.Equal(t, "mqttpass", cfg.MqttCfg.Password)
 	assert.Equal(t, "https://api.amber.com", cfg.AmberCfg.Host)
 	assert.Equal(t, "tok123", cfg.AmberCfg.Token)
-	assert.Equal(t, "/custom/migrations", cfg.MigrationsFolder)
 }

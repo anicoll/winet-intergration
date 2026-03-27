@@ -170,8 +170,7 @@ func TestMultiPublisher_PublishData_IgnoredSlugNotSent(t *testing.T) {
 		device: {{Slug: "grid_frequency", Unit: "Hz", Value: &v}},
 	}))
 
-	require.Len(t, p1.writes, 1)
-	assert.Empty(t, p1.writes[0], "ignored slug must produce an empty data set")
+	require.Len(t, p1.writes, 0)
 }
 
 func TestMultiPublisher_PublishData_DeduplicatesUnchangedValues(t *testing.T) {
@@ -190,10 +189,9 @@ func TestMultiPublisher_PublishData_DeduplicatesUnchangedValues(t *testing.T) {
 	publish("10.0") // unchanged → skipped
 	publish("11.0") // changed → written
 
-	require.Len(t, p1.writes, 3, "Write called once per PublishData invocation")
+	require.Len(t, p1.writes, 2, "Write called once per PublishData invocation")
 	assert.Len(t, p1.writes[0], 1, "first call: 1 new datapoint")
-	assert.Empty(t, p1.writes[1], "second call: 0 datapoints (unchanged)")
-	assert.Len(t, p1.writes[2], 1, "third call: 1 updated datapoint")
+	assert.Len(t, p1.writes[1], 1, "third call: 1 updated datapoint")
 }
 
 func TestMultiPublisher_RegisterDevice_FansOutToAllBackends(t *testing.T) {

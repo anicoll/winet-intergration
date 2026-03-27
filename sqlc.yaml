@@ -1,23 +1,9 @@
-version: "2"
-sql:
-  - engine: "postgresql"
-    queries: "internal/pkg/database/queries/"
-    schema: "migrations/"
-    gen:
-      go:
-        package: "db"
-        out: "internal/pkg/database/db"
-        sql_package: "pgx/v5"
-        emit_json_tags: true
-        overrides:
-          - db_type: "pg_catalog.int4"
-            go_type: "int"
-          - db_type: "serial"
-            go_type: "int"
-          - db_type: "pg_catalog.numeric"
-            go_type: "float64"
-          - db_type: "pg_catalog.timestamptz"
-            nullable: false
-            go_type:
-              import: "time"
-              type: "Time"
+# sqlc is no longer used in this project.
+#
+# sqlc does not support SQL Server / Azure SQL. The queries in
+# internal/pkg/database/queries/ are written in T-SQL and will be executed
+# directly via database/sql + github.com/microsoft/go-mssqldb in the
+# Azure Functions database layer.
+#
+# The generated code in internal/pkg/database/db/ is kept as-is until the
+# local service DB dependency is removed during the wiring step.

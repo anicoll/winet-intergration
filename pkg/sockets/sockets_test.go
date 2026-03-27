@@ -19,13 +19,14 @@ var upgrader = websocket.Upgrader{
 
 type testServer struct {
 	*httptest.Server
-	url    string
-	conn   *websocket.Conn
-	connMu sync.Mutex
+	url       string
+	conn      *websocket.Conn
+	connMu    sync.Mutex
+	connReady chan struct{}
 }
 
 func newTestServer(t *testing.T) *testServer {
-	ts := &testServer{}
+	ts := &testServer{connReady: make(chan struct{})}
 
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := upgrader.Upgrade(w, r, nil)
@@ -34,6 +35,7 @@ func newTestServer(t *testing.T) *testServer {
 		ts.connMu.Lock()
 		ts.conn = c
 		ts.connMu.Unlock()
+		close(ts.connReady)
 	}))
 
 	ts.Server = s
@@ -42,6 +44,7 @@ func newTestServer(t *testing.T) *testServer {
 }
 
 func (ts *testServer) sendMessage(msg []byte) error {
+	<-ts.connReady
 	ts.connMu.Lock()
 	defer ts.connMu.Unlock()
 	return ts.conn.WriteMessage(websocket.TextMessage, msg)
@@ -194,10 +197,10 @@ func TestPing(t *testing.T) {
 		require.NoError(t, err)
 
 		go func() {
-			ts := server
-			ts.connMu.Lock()
-			defer ts.connMu.Unlock()
-			_, msg, err := ts.conn.ReadMessage()
+			<-server.connReady
+			server.connMu.Lock()
+			defer server.connMu.Unlock()
+			_, msg, err := server.conn.ReadMessage()
 			require.NoError(t, err)
 			pingReceived <- msg
 		}()
