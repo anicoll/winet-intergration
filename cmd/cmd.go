@@ -17,14 +17,13 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	winetv1 "github.com/anicoll/winet-integration/gen/winet/v1"
 	"github.com/anicoll/winet-integration/internal/pkg/amber"
 	"github.com/anicoll/winet-integration/internal/pkg/config"
 	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
 	"github.com/anicoll/winet-integration/internal/pkg/feedin"
-	"github.com/anicoll/winet-integration/internal/pkg/grpcclient"
 	"github.com/anicoll/winet-integration/internal/pkg/mqtt"
 	"github.com/anicoll/winet-integration/internal/pkg/publisher"
+	"github.com/anicoll/winet-integration/internal/pkg/sqldb"
 	"github.com/anicoll/winet-integration/internal/pkg/winet"
 )
 
@@ -42,14 +41,14 @@ type AmberPricesWriter interface {
 	WriteAmberPrices(ctx context.Context, prices []dbpkg.Amberprice) error
 }
 
-type commandExecutor interface {
-	SendSelfConsumptionCommand() (bool, error)
-	SendBatteryStopCommand() (bool, error)
-	SetFeedInLimitation(feedinLimited bool) (bool, error)
-	SendDischargeCommand(dischargePower string) (bool, error)
-	SendChargeCommand(chargePower string) (bool, error)
-	SendInverterStateChangeCommand(disable bool) (bool, error)
-}
+// type commandExecutor interface {
+// 	SendSelfConsumptionCommand() (bool, error)
+// 	SendBatteryStopCommand() (bool, error)
+// 	SetFeedInLimitation(feedinLimited bool) (bool, error)
+// 	SendDischargeCommand(dischargePower string) (bool, error)
+// 	SendChargeCommand(chargePower string) (bool, error)
+// 	SendInverterStateChangeCommand(disable bool) (bool, error)
+// }
 
 const (
 	// Channel buffer sizes
@@ -63,7 +62,7 @@ const (
 	priceUpdateDelay = 5 * time.Second
 
 	// Command polling
-	commandPollInterval = 30 * time.Second
+	// commandPollInterval = 30 * time.Second
 
 	// Reconnect backoff
 	backoffBase     = 5 * time.Second
@@ -103,9 +102,16 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		return fmt.Errorf("failed to connect to MQTT broker: %w", err)
 	}
 
-	grpcPub := grpcclient.New(cfg.FunctionCfg.IngestionURL, cfg.FunctionCfg.APIKey)
+	if cfg.DatabaseCfg.URL == "" {
+		return fmt.Errorf("DATABASE_URL is required")
+	}
+	sqlWriter, err := sqldb.New(cfg.DatabaseCfg.URL)
+	if err != nil {
+		return fmt.Errorf("failed to open SQL database: %w", err)
+	}
+	defer func() { _ = sqlWriter.Close() }()
 
-	pub := publisher.NewMultiPublisher(grpcPub, mqttPublisher)
+	pub := publisher.NewMultiPublisher(sqlWriter)
 
 	errorChan := make(chan error, errorChannelBuffer)
 	winetSvc := winet.New(&cfg.WinetCfg, pub, errorChan)
@@ -122,12 +128,12 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	// Start amber price processing service
 	eg.Go(func() error {
-		return startAmberPriceService(ctx, &cfg.AmberCfg, grpcPub, errorChan, logger, feedinCtrl.Evaluate)
+		return startAmberPriceService(ctx, &cfg.AmberCfg, sqlWriter, errorChan, logger, feedinCtrl.Evaluate)
 	})
 
 	// Start amber usage processing service
 	eg.Go(func() error {
-		return startAmberUsageService(ctx, &cfg.AmberCfg, grpcPub, errorChan, logger)
+		return startAmberUsageService(ctx, &cfg.AmberCfg, sqlWriter, errorChan, logger)
 	})
 
 	// Start winet service with retry logic
@@ -136,9 +142,10 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	})
 
 	// Start command polling loop
-	eg.Go(func() error {
-		return startCommandPollingService(ctx, grpcPub, winetSvc, logger)
-	})
+	// TODO: re-implement this later.
+	// eg.Go(func() error {
+	// 	return startCommandPollingService(ctx, grpcPub, winetSvc, logger)
+	// })
 
 	// Start error handler
 	eg.Go(func() error {
@@ -357,61 +364,6 @@ func startWinetService(ctx context.Context, winetSvc winetSvc, logger *zap.Logge
 	}
 }
 
-func startCommandPollingService(ctx context.Context, pub *grpcclient.Publisher, exec commandExecutor, logger *zap.Logger) error {
-	logger.Info("Starting command polling service")
-	ticker := time.NewTicker(commandPollInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			logger.Info("Command polling service stopped")
-			return ctx.Err()
-		case <-ticker.C:
-			pollAndDispatchCommands(ctx, pub, exec, logger)
-		}
-	}
-}
-
-func pollAndDispatchCommands(ctx context.Context, pub *grpcclient.Publisher, exec commandExecutor, logger *zap.Logger) {
-	for _, deviceID := range pub.DeviceIDs() {
-		cmds, err := pub.GetPendingCommands(ctx, deviceID)
-		if err != nil {
-			logger.Error("GetPendingCommands failed", zap.String("device", deviceID), zap.Error(err))
-			continue
-		}
-		for _, cmd := range cmds {
-			success, dispatchErr := dispatchCommand(exec, cmd)
-			if dispatchErr != nil {
-				logger.Error("command dispatch failed", zap.String("id", cmd.Id), zap.Error(dispatchErr))
-			}
-			if ackErr := pub.AckCommand(ctx, cmd.Id, success && dispatchErr == nil); ackErr != nil {
-				logger.Error("AckCommand failed", zap.String("id", cmd.Id), zap.Error(ackErr))
-			}
-		}
-	}
-}
-
-func dispatchCommand(exec commandExecutor, cmd *winetv1.InverterCommand) (bool, error) {
-	switch c := cmd.Command.(type) {
-	case *winetv1.InverterCommand_SelfConsumption:
-		_ = c
-		return exec.SendSelfConsumptionCommand()
-	case *winetv1.InverterCommand_BatteryStop:
-		_ = c
-		return exec.SendBatteryStopCommand()
-	case *winetv1.InverterCommand_Discharge:
-		return exec.SendDischargeCommand(c.Discharge.DischargePower)
-	case *winetv1.InverterCommand_Charge:
-		return exec.SendChargeCommand(c.Charge.ChargePower)
-	case *winetv1.InverterCommand_InverterStateChange:
-		return exec.SendInverterStateChangeCommand(c.InverterStateChange.Disable)
-	case *winetv1.InverterCommand_SetFeedInLimitation:
-		return exec.SetFeedInLimitation(c.SetFeedInLimitation.Limited)
-	default:
-		return false, fmt.Errorf("unknown command type %T", cmd.Command)
-	}
-}
-
 func handleErrors(ctx context.Context, errorChan chan error, logger *zap.Logger) error {
 	logger.Info("Starting error handler")
 
@@ -431,3 +383,58 @@ func handleErrors(ctx context.Context, errorChan chan error, logger *zap.Logger)
 		}
 	}
 }
+
+// func startCommandPollingService(ctx context.Context, pub *grpcclient.Publisher, exec commandExecutor, logger *zap.Logger) error {
+// 	logger.Info("Starting command polling service")
+// 	ticker := time.NewTicker(commandPollInterval)
+// 	defer ticker.Stop()
+// 	for {
+// 		select {
+// 		case <-ctx.Done():
+// 			logger.Info("Command polling service stopped")
+// 			return ctx.Err()
+// 		case <-ticker.C:
+// 			pollAndDispatchCommands(ctx, pub, exec, logger)
+// 		}
+// 	}
+// }
+
+// func pollAndDispatchCommands(ctx context.Context, pub *grpcclient.Publisher, exec commandExecutor, logger *zap.Logger) {
+// 	for _, deviceID := range pub.DeviceIDs() {
+// 		cmds, err := pub.GetPendingCommands(ctx, deviceID)
+// 		if err != nil {
+// 			logger.Error("GetPendingCommands failed", zap.String("device", deviceID), zap.Error(err))
+// 			continue
+// 		}
+// 		for _, cmd := range cmds {
+// 			success, dispatchErr := dispatchCommand(exec, cmd)
+// 			if dispatchErr != nil {
+// 				logger.Error("command dispatch failed", zap.String("id", cmd.Id), zap.Error(dispatchErr))
+// 			}
+// 			if ackErr := pub.AckCommand(ctx, cmd.Id, success && dispatchErr == nil); ackErr != nil {
+// 				logger.Error("AckCommand failed", zap.String("id", cmd.Id), zap.Error(ackErr))
+// 			}
+// 		}
+// 	}
+// }
+
+// func dispatchCommand(exec commandExecutor, cmd *winetv1.InverterCommand) (bool, error) {
+// 	switch c := cmd.Command.(type) {
+// 	case *winetv1.InverterCommand_SelfConsumption:
+// 		_ = c
+// 		return exec.SendSelfConsumptionCommand()
+// 	case *winetv1.InverterCommand_BatteryStop:
+// 		_ = c
+// 		return exec.SendBatteryStopCommand()
+// 	case *winetv1.InverterCommand_Discharge:
+// 		return exec.SendDischargeCommand(c.Discharge.DischargePower)
+// 	case *winetv1.InverterCommand_Charge:
+// 		return exec.SendChargeCommand(c.Charge.ChargePower)
+// 	case *winetv1.InverterCommand_InverterStateChange:
+// 		return exec.SendInverterStateChangeCommand(c.InverterStateChange.Disable)
+// 	case *winetv1.InverterCommand_SetFeedInLimitation:
+// 		return exec.SetFeedInLimitation(c.SetFeedInLimitation.Limited)
+// 	default:
+// 		return false, fmt.Errorf("unknown command type %T", cmd.Command)
+// 	}
+// }

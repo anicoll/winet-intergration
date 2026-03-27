@@ -63,6 +63,9 @@ func (m *MultiPublisher) PublishData(ctx context.Context, deviceStatusMap map[mo
 		}
 	}
 	for _, p := range m.publishers {
+		if len(data) < 1 {
+			continue
+		}
 		if err := p.Write(ctx, data); err != nil {
 			zap.L().Error("failed to publish data", zap.Error(err))
 		}
