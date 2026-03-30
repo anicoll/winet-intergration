@@ -14,11 +14,13 @@ import (
 	"syscall"
 	"time"
 
+	"database/sql"
+
 	paho_mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/golang-migrate/migrate/v4"
 	"github.com/jackc/pgx/v5/pgxpool"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/robfig/cron/v3"
+	_ "github.com/sijms/go-ora/v2"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
@@ -31,6 +33,7 @@ import (
 	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 	"github.com/anicoll/winet-integration/internal/pkg/server"
 	"github.com/anicoll/winet-integration/internal/pkg/store"
+	orastore "github.com/anicoll/winet-integration/internal/pkg/store/oracle"
 	pgstore "github.com/anicoll/winet-integration/internal/pkg/store/postgres"
 	"github.com/anicoll/winet-integration/internal/pkg/winet"
 	api "github.com/anicoll/winet-integration/pkg/server"
@@ -105,7 +108,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	}()
 
 	// Initialize database connection
-	db, cleanup, err := setupDatabase(ctx, cfg.DBDSN, cfg.MigrationsFolder)
+	db, cleanup, err := setupDatabase(ctx, cfg.DBDriver, cfg.DBDSN, cfg.MigrationsFolder)
 	if err != nil {
 		return fmt.Errorf("failed to setup database: %w", err)
 	}
@@ -200,21 +203,38 @@ func setupLogger(logLevel string) (*zap.Logger, error) {
 	return logger, nil
 }
 
-func setupDatabase(ctx context.Context, dsn, migrationsPath string) (store.Store, func(), error) {
-	err := migration.Migrate(dsn, migrationsPath)
-	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return nil, nil, fmt.Errorf("failed to run migrations: %w", err)
+func setupDatabase(ctx context.Context, driver, dsn, migrationsPath string) (store.Store, func(), error) {
+	if migrationsPath == "" {
+		migrationsPath = "migrations/" + driver
 	}
 
-	pool, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		return nil, nil, err
-	}
-	if err := pool.Ping(ctx); err != nil {
-		return nil, nil, fmt.Errorf("failed to connect to database: %w", err)
-	}
+	switch driver {
+	case "oracle":
+		if err := migration.Migrate(driver, dsn, migrationsPath); err != nil {
+			return nil, nil, fmt.Errorf("failed to run oracle migrations: %w", err)
+		}
+		db, err := sql.Open("oracle", dsn)
+		if err != nil {
+			return nil, nil, fmt.Errorf("open oracle connection: %w", err)
+		}
+		if err := db.PingContext(ctx); err != nil {
+			return nil, nil, fmt.Errorf("failed to connect to oracle: %w", err)
+		}
+		return orastore.New(db), func() { _ = db.Close() }, nil
 
-	return pgstore.New(pool), pool.Close, nil
+	default: // "postgres"
+		if err := migration.Migrate(driver, dsn, migrationsPath); err != nil {
+			return nil, nil, fmt.Errorf("failed to run migrations: %w", err)
+		}
+		pool, err := pgxpool.New(ctx, dsn)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := pool.Ping(ctx); err != nil {
+			return nil, nil, fmt.Errorf("failed to connect to database: %w", err)
+		}
+		return pgstore.New(pool), pool.Close, nil
+	}
 }
 
 func startAmberPriceService(ctx context.Context, amberCfg *config.AmberConfig, db store.Store, errChan chan error, logger *zap.Logger, onPriceUpdate func([]store.Amberprice)) error {

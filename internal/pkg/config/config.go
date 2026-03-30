@@ -13,8 +13,9 @@ type Config struct {
 	AmberCfg         AmberConfig
 	AuthCfg          AuthConfig
 	LogLevel         string   `env:"LOG_LEVEL"          envDefault:"info"`
+	DBDriver         string   `env:"DB_DRIVER"          envDefault:"postgres"`
 	DBDSN            string   `env:"DATABASE_URL,required"`
-	MigrationsFolder string   `env:"MIGRATIONS_FOLDER"  envDefault:"migrations"`
+	MigrationsFolder string   `env:"MIGRATIONS_FOLDER"  envDefault:""`
 	Timezone         string   `env:"TIMEZONE"           envDefault:"Australia/Adelaide"`
 	AllowedOrigins   []string `env:"ALLOWED_ORIGIN,required" envSeparator:","`
 }
