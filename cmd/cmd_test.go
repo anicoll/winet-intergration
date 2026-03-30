@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
+	"github.com/anicoll/winet-integration/internal/pkg/store"
 	cmdmocks "github.com/anicoll/winet-integration/mocks/cmd"
 )
 
@@ -57,7 +57,7 @@ func TestFetchAndStoreUsage_DateRangeIsSevenDaysEndingYesterday(t *testing.T) {
 
 func TestFetchAndStoreUsage_WritesReturnedUsageToDatabase(t *testing.T) {
 	now := time.Now().UTC()
-	usage := []dbpkg.Amberusage{
+	usage := []store.Amberusage{
 		{ID: 1, ChannelIdentifier: "E1", Kwh: 1.5, StartTime: now, EndTime: now.Add(30 * time.Minute)},
 		{ID: 2, ChannelIdentifier: "B2", Kwh: -0.3, StartTime: now, EndTime: now.Add(30 * time.Minute)},
 	}
@@ -89,7 +89,7 @@ func TestFetchAndStoreUsage_DatabaseWriteError_PropagatesError(t *testing.T) {
 	db := cmdmocks.NewAmberUsageWriter(t)
 
 	svc.EXPECT().GetUsage(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]dbpkg.Amberusage{{ID: 1}}, nil)
+		Return([]store.Amberusage{{ID: 1}}, nil)
 	db.EXPECT().WriteAmberUsage(mock.Anything, mock.Anything).Return(errors.New("db write failed"))
 
 	err := fetchAndStoreUsage(context.Background(), svc, db, "site-xyz")
@@ -103,8 +103,8 @@ func TestFetchAndStoreUsage_EmptyUsage_WritesEmptySlice(t *testing.T) {
 	db := cmdmocks.NewAmberUsageWriter(t)
 
 	svc.EXPECT().GetUsage(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]dbpkg.Amberusage{}, nil)
-	db.EXPECT().WriteAmberUsage(mock.Anything, []dbpkg.Amberusage{}).Return(nil)
+		Return([]store.Amberusage{}, nil)
+	db.EXPECT().WriteAmberUsage(mock.Anything, []store.Amberusage{}).Return(nil)
 
 	require.NoError(t, fetchAndStoreUsage(context.Background(), svc, db, "site-xyz"))
 }

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
-	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
+	"github.com/anicoll/winet-integration/internal/pkg/store"
 	authmocks "github.com/anicoll/winet-integration/mocks/auth"
 )
 
@@ -35,7 +35,7 @@ func noopTokenStore(t *testing.T) *authmocks.TokenStore {
 	t.Helper()
 	ts := authmocks.NewTokenStore(t)
 	ts.EXPECT().StoreRefreshToken(mock.Anything, mock.Anything).Return(nil).Maybe()
-	ts.EXPECT().GetRefreshToken(mock.Anything, mock.Anything).Return(dbpkg.RefreshToken{}, errors.New("not found")).Maybe()
+	ts.EXPECT().GetRefreshToken(mock.Anything, mock.Anything).Return(store.RefreshToken{}, errors.New("not found")).Maybe()
 	ts.EXPECT().DeleteRefreshToken(mock.Anything, mock.Anything).Return(nil).Maybe()
 	ts.EXPECT().DeleteExpiredRefreshTokens(mock.Anything).Return(nil).Maybe()
 	return ts
@@ -44,7 +44,7 @@ func noopTokenStore(t *testing.T) *authmocks.TokenStore {
 func validUserStore(t *testing.T) *authmocks.UserStore {
 	t.Helper()
 	us := authmocks.NewUserStore(t)
-	us.EXPECT().GetUserByUsername(mock.Anything, mock.Anything).Return(dbpkg.User{
+	us.EXPECT().GetUserByUsername(mock.Anything, mock.Anything).Return(store.User{
 		ID:           testUserID,
 		Username:     testUsername,
 		PasswordHash: hashForTest(t, testPassword),
@@ -71,7 +71,7 @@ func TestLogin_Success(t *testing.T) {
 
 func TestLogin_UnknownUser(t *testing.T) {
 	us := authmocks.NewUserStore(t)
-	us.EXPECT().GetUserByUsername(mock.Anything, mock.Anything).Return(dbpkg.User{}, errors.New("not found"))
+	us.EXPECT().GetUserByUsername(mock.Anything, mock.Anything).Return(store.User{}, errors.New("not found"))
 	svc := newTestService(t, us)
 
 	_, _, err := svc.Login(context.Background(), "nobody", testPassword)

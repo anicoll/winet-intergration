@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
+	"github.com/anicoll/winet-integration/internal/pkg/store"
 )
 
 // stubInverter records calls to SetFeedInLimitation for assertion.
@@ -27,9 +27,9 @@ func (s *stubInverter) SetFeedInLimitation(limited bool) (bool, error) {
 // feedinPrices returns a non-forecast feedIn price active around time.Now().
 // Inside a synctest bubble time.Now() returns the fake clock value, so calling
 // this after time.Sleep gives an interval centred on the advanced fake time.
-func feedinPrices(perKwh float64) []dbpkg.Amberprice {
+func feedinPrices(perKwh float64) []store.Amberprice {
 	now := time.Now().UTC()
-	return []dbpkg.Amberprice{{
+	return []store.Amberprice{{
 		ChannelType: feedinChannel,
 		StartTime:   now.Add(-5 * time.Minute),
 		EndTime:     now.Add(5 * time.Minute),
@@ -215,7 +215,7 @@ func TestEvaluate_ForecastPriceOnly_NoCommand(t *testing.T) {
 		c.latestExportPower = new(0.0)
 
 		now := time.Now().UTC()
-		prices := []dbpkg.Amberprice{{
+		prices := []store.Amberprice{{
 			ChannelType: feedinChannel,
 			StartTime:   now.Add(-5 * time.Minute),
 			EndTime:     now.Add(5 * time.Minute),
@@ -258,7 +258,7 @@ func TestEvaluate_OnlyFeedinChannelConsidered(t *testing.T) {
 
 		// Positive "general" price but no feedIn price — must not trigger.
 		now := time.Now().UTC()
-		prices := []dbpkg.Amberprice{{
+		prices := []store.Amberprice{{
 			ChannelType: "general",
 			StartTime:   now.Add(-5 * time.Minute),
 			EndTime:     now.Add(5 * time.Minute),

@@ -17,7 +17,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/anicoll/winet-integration/internal/pkg/auth"
-	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
+	"github.com/anicoll/winet-integration/internal/pkg/store"
 	authmocks "github.com/anicoll/winet-integration/mocks/auth"
 	servermocks "github.com/anicoll/winet-integration/mocks/server"
 	api "github.com/anicoll/winet-integration/pkg/server"
@@ -40,8 +40,8 @@ func postJSON(t *testing.T, body any) *http.Request {
 	return r
 }
 
-func propSeq(props []dbpkg.Property) iter.Seq[dbpkg.Property] {
-	return func(yield func(dbpkg.Property) bool) {
+func propSeq(props []store.Property) iter.Seq[store.Property] {
+	return func(yield func(store.Property) bool) {
 		for _, p := range props {
 			if !yield(p) {
 				return
@@ -172,7 +172,7 @@ func TestPostInverterState_On(t *testing.T) {
 // --- GetProperties ---
 
 func TestGetProperties_ReturnsJSON(t *testing.T) {
-	props := []dbpkg.Property{
+	props := []store.Property{
 		{ID: 1, Identifier: "XH3000_SN001", Slug: "battery_power", Value: "5.5", UnitOfMeasurement: "kW"},
 		{ID: 2, Identifier: "XH3000_SN001", Slug: "battery_soc", Value: "80", UnitOfMeasurement: "%"},
 	}
@@ -186,7 +186,7 @@ func TestGetProperties_ReturnsJSON(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
-	var got []dbpkg.Property
+	var got []store.Property
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
 	assert.Len(t, got, 2)
 }
@@ -216,7 +216,7 @@ func newAuthService(t *testing.T) *auth.Service {
 	require.NoError(t, err)
 
 	us := authmocks.NewUserStore(t)
-	us.EXPECT().GetUserByUsername(mock.Anything, mock.Anything).Return(dbpkg.User{
+	us.EXPECT().GetUserByUsername(mock.Anything, mock.Anything).Return(store.User{
 		ID:           1,
 		Username:     authTestUsername,
 		PasswordHash: string(h),
@@ -224,7 +224,7 @@ func newAuthService(t *testing.T) *auth.Service {
 
 	ts := authmocks.NewTokenStore(t)
 	ts.EXPECT().StoreRefreshToken(mock.Anything, mock.Anything).Return(nil).Maybe()
-	ts.EXPECT().GetRefreshToken(mock.Anything, mock.Anything).Return(dbpkg.RefreshToken{}, errors.New("not found")).Maybe()
+	ts.EXPECT().GetRefreshToken(mock.Anything, mock.Anything).Return(store.RefreshToken{}, errors.New("not found")).Maybe()
 	ts.EXPECT().DeleteRefreshToken(mock.Anything, mock.Anything).Return(nil).Maybe()
 	ts.EXPECT().DeleteExpiredRefreshTokens(mock.Anything).Return(nil).Maybe()
 
@@ -414,7 +414,7 @@ func TestPostAuthLogout_NoCookie_Returns204(t *testing.T) {
 
 func TestGetAmberUsageFromTo_ReturnsJSON(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
-	usage := []dbpkg.Amberusage{
+	usage := []store.Amberusage{
 		{
 			ID:                1,
 			PerKwh:            24.5,

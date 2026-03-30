@@ -7,7 +7,7 @@ package mocks
 import (
 	"context"
 
-	"github.com/anicoll/winet-integration/internal/pkg/database/db"
+	"github.com/anicoll/winet-integration/internal/pkg/store"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -147,22 +147,22 @@ func (_c *TokenStore_DeleteRefreshToken_Call) RunAndReturn(run func(ctx context.
 }
 
 // GetRefreshToken provides a mock function for the type TokenStore
-func (_mock *TokenStore) GetRefreshToken(ctx context.Context, tokenHash string) (db.RefreshToken, error) {
+func (_mock *TokenStore) GetRefreshToken(ctx context.Context, tokenHash string) (store.RefreshToken, error) {
 	ret := _mock.Called(ctx, tokenHash)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetRefreshToken")
 	}
 
-	var r0 db.RefreshToken
+	var r0 store.RefreshToken
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (db.RefreshToken, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (store.RefreshToken, error)); ok {
 		return returnFunc(ctx, tokenHash)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) db.RefreshToken); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) store.RefreshToken); ok {
 		r0 = returnFunc(ctx, tokenHash)
 	} else {
-		r0 = ret.Get(0).(db.RefreshToken)
+		r0 = ret.Get(0).(store.RefreshToken)
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
 		r1 = returnFunc(ctx, tokenHash)
@@ -202,18 +202,18 @@ func (_c *TokenStore_GetRefreshToken_Call) Run(run func(ctx context.Context, tok
 	return _c
 }
 
-func (_c *TokenStore_GetRefreshToken_Call) Return(refreshToken db.RefreshToken, err error) *TokenStore_GetRefreshToken_Call {
+func (_c *TokenStore_GetRefreshToken_Call) Return(refreshToken store.RefreshToken, err error) *TokenStore_GetRefreshToken_Call {
 	_c.Call.Return(refreshToken, err)
 	return _c
 }
 
-func (_c *TokenStore_GetRefreshToken_Call) RunAndReturn(run func(ctx context.Context, tokenHash string) (db.RefreshToken, error)) *TokenStore_GetRefreshToken_Call {
+func (_c *TokenStore_GetRefreshToken_Call) RunAndReturn(run func(ctx context.Context, tokenHash string) (store.RefreshToken, error)) *TokenStore_GetRefreshToken_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // StoreRefreshToken provides a mock function for the type TokenStore
-func (_mock *TokenStore) StoreRefreshToken(ctx context.Context, arg db.StoreRefreshTokenParams) error {
+func (_mock *TokenStore) StoreRefreshToken(ctx context.Context, arg store.StoreRefreshTokenParams) error {
 	ret := _mock.Called(ctx, arg)
 
 	if len(ret) == 0 {
@@ -221,7 +221,7 @@ func (_mock *TokenStore) StoreRefreshToken(ctx context.Context, arg db.StoreRefr
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, db.StoreRefreshTokenParams) error); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, store.StoreRefreshTokenParams) error); ok {
 		r0 = returnFunc(ctx, arg)
 	} else {
 		r0 = ret.Error(0)
@@ -236,20 +236,20 @@ type TokenStore_StoreRefreshToken_Call struct {
 
 // StoreRefreshToken is a helper method to define mock.On call
 //   - ctx context.Context
-//   - arg db.StoreRefreshTokenParams
+//   - arg store.StoreRefreshTokenParams
 func (_e *TokenStore_Expecter) StoreRefreshToken(ctx interface{}, arg interface{}) *TokenStore_StoreRefreshToken_Call {
 	return &TokenStore_StoreRefreshToken_Call{Call: _e.mock.On("StoreRefreshToken", ctx, arg)}
 }
 
-func (_c *TokenStore_StoreRefreshToken_Call) Run(run func(ctx context.Context, arg db.StoreRefreshTokenParams)) *TokenStore_StoreRefreshToken_Call {
+func (_c *TokenStore_StoreRefreshToken_Call) Run(run func(ctx context.Context, arg store.StoreRefreshTokenParams)) *TokenStore_StoreRefreshToken_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 db.StoreRefreshTokenParams
+		var arg1 store.StoreRefreshTokenParams
 		if args[1] != nil {
-			arg1 = args[1].(db.StoreRefreshTokenParams)
+			arg1 = args[1].(store.StoreRefreshTokenParams)
 		}
 		run(
 			arg0,
@@ -264,7 +264,7 @@ func (_c *TokenStore_StoreRefreshToken_Call) Return(err error) *TokenStore_Store
 	return _c
 }
 
-func (_c *TokenStore_StoreRefreshToken_Call) RunAndReturn(run func(ctx context.Context, arg db.StoreRefreshTokenParams) error) *TokenStore_StoreRefreshToken_Call {
+func (_c *TokenStore_StoreRefreshToken_Call) RunAndReturn(run func(ctx context.Context, arg store.StoreRefreshTokenParams) error) *TokenStore_StoreRefreshToken_Call {
 	_c.Call.Return(run)
 	return _c
 }

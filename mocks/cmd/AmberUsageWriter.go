@@ -7,7 +7,7 @@ package mocks
 import (
 	"context"
 
-	"github.com/anicoll/winet-integration/internal/pkg/database/db"
+	"github.com/anicoll/winet-integration/internal/pkg/store"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -39,7 +39,7 @@ func (_m *AmberUsageWriter) EXPECT() *AmberUsageWriter_Expecter {
 }
 
 // WriteAmberUsage provides a mock function for the type AmberUsageWriter
-func (_mock *AmberUsageWriter) WriteAmberUsage(ctx context.Context, usage []db.Amberusage) error {
+func (_mock *AmberUsageWriter) WriteAmberUsage(ctx context.Context, usage []store.Amberusage) error {
 	ret := _mock.Called(ctx, usage)
 
 	if len(ret) == 0 {
@@ -47,7 +47,7 @@ func (_mock *AmberUsageWriter) WriteAmberUsage(ctx context.Context, usage []db.A
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, []db.Amberusage) error); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []store.Amberusage) error); ok {
 		r0 = returnFunc(ctx, usage)
 	} else {
 		r0 = ret.Error(0)
@@ -62,20 +62,20 @@ type AmberUsageWriter_WriteAmberUsage_Call struct {
 
 // WriteAmberUsage is a helper method to define mock.On call
 //   - ctx context.Context
-//   - usage []db.Amberusage
+//   - usage []store.Amberusage
 func (_e *AmberUsageWriter_Expecter) WriteAmberUsage(ctx interface{}, usage interface{}) *AmberUsageWriter_WriteAmberUsage_Call {
 	return &AmberUsageWriter_WriteAmberUsage_Call{Call: _e.mock.On("WriteAmberUsage", ctx, usage)}
 }
 
-func (_c *AmberUsageWriter_WriteAmberUsage_Call) Run(run func(ctx context.Context, usage []db.Amberusage)) *AmberUsageWriter_WriteAmberUsage_Call {
+func (_c *AmberUsageWriter_WriteAmberUsage_Call) Run(run func(ctx context.Context, usage []store.Amberusage)) *AmberUsageWriter_WriteAmberUsage_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 []db.Amberusage
+		var arg1 []store.Amberusage
 		if args[1] != nil {
-			arg1 = args[1].([]db.Amberusage)
+			arg1 = args[1].([]store.Amberusage)
 		}
 		run(
 			arg0,
@@ -90,7 +90,7 @@ func (_c *AmberUsageWriter_WriteAmberUsage_Call) Return(err error) *AmberUsageWr
 	return _c
 }
 
-func (_c *AmberUsageWriter_WriteAmberUsage_Call) RunAndReturn(run func(ctx context.Context, usage []db.Amberusage) error) *AmberUsageWriter_WriteAmberUsage_Call {
+func (_c *AmberUsageWriter_WriteAmberUsage_Call) RunAndReturn(run func(ctx context.Context, usage []store.Amberusage) error) *AmberUsageWriter_WriteAmberUsage_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/anicoll/winet-integration/internal/pkg/auth"
-	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
+	"github.com/anicoll/winet-integration/internal/pkg/store"
 	api "github.com/anicoll/winet-integration/pkg/server"
 )
 
@@ -30,10 +30,10 @@ type WinetService interface {
 }
 
 type Database interface {
-	GetLatestProperties(ctx context.Context) (iter.Seq[dbpkg.Property], error)
-	GetProperties(ctx context.Context, identifier, slug string, from, to *time.Time) ([]dbpkg.Property, error)
-	GetAmberPrices(ctx context.Context, from, to time.Time, site *string) ([]dbpkg.Amberprice, error)
-	GetAmberUsage(ctx context.Context, from, to time.Time) ([]dbpkg.Amberusage, error)
+	GetLatestProperties(ctx context.Context) (iter.Seq[store.Property], error)
+	GetProperties(ctx context.Context, identifier, slug string, from, to *time.Time) ([]store.Property, error)
+	GetAmberPrices(ctx context.Context, from, to time.Time, site *string) ([]store.Amberprice, error)
+	GetAmberUsage(ctx context.Context, from, to time.Time) ([]store.Amberusage, error)
 }
 
 type server struct {
@@ -104,8 +104,8 @@ func (s *server) GetAmberUsageFromTo(w http.ResponseWriter, r *http.Request, fro
 			Kwh:               float32(u.Kwh),
 			Quality:           api.AmberUsageQuality(u.Quality),
 			Cost:              float32(u.Cost),
-			CreatedAt:         u.CreatedAt.Time,
-			UpdatedAt:         u.UpdatedAt.Time,
+			CreatedAt:         u.CreatedAt,
+			UpdatedAt:         u.UpdatedAt,
 		})
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -132,8 +132,8 @@ func (s *server) GetAmberPricesFromTo(w http.ResponseWriter, r *http.Request, fr
 			Duration:    price.Duration,
 			Forecast:    price.Forecast,
 			ChannelType: price.ChannelType,
-			CreatedAt:   price.CreatedAt.Time,
-			UpdatedAt:   price.UpdatedAt.Time,
+			CreatedAt:   price.CreatedAt,
+			UpdatedAt:   price.UpdatedAt,
 			Id:          price.ID,
 		})
 	}
@@ -309,7 +309,7 @@ func (s *server) GetProperties(w http.ResponseWriter, r *http.Request) {
 		handleError(w, err)
 		return
 	}
-	properties := []dbpkg.Property{}
+	properties := []store.Property{}
 	for prop := range props {
 		properties = append(properties, prop)
 	}
