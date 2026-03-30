@@ -7,7 +7,7 @@ package mocks
 import (
 	"context"
 
-	"github.com/anicoll/winet-integration/internal/pkg/database/db"
+	"github.com/anicoll/winet-integration/internal/pkg/store"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -39,22 +39,22 @@ func (_m *UserStore) EXPECT() *UserStore_Expecter {
 }
 
 // GetUserByUsername provides a mock function for the type UserStore
-func (_mock *UserStore) GetUserByUsername(ctx context.Context, username string) (db.User, error) {
+func (_mock *UserStore) GetUserByUsername(ctx context.Context, username string) (store.User, error) {
 	ret := _mock.Called(ctx, username)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetUserByUsername")
 	}
 
-	var r0 db.User
+	var r0 store.User
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (db.User, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (store.User, error)); ok {
 		return returnFunc(ctx, username)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) db.User); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) store.User); ok {
 		r0 = returnFunc(ctx, username)
 	} else {
-		r0 = ret.Get(0).(db.User)
+		r0 = ret.Get(0).(store.User)
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
 		r1 = returnFunc(ctx, username)
@@ -94,12 +94,12 @@ func (_c *UserStore_GetUserByUsername_Call) Run(run func(ctx context.Context, us
 	return _c
 }
 
-func (_c *UserStore_GetUserByUsername_Call) Return(user db.User, err error) *UserStore_GetUserByUsername_Call {
+func (_c *UserStore_GetUserByUsername_Call) Return(user store.User, err error) *UserStore_GetUserByUsername_Call {
 	_c.Call.Return(user, err)
 	return _c
 }
 
-func (_c *UserStore_GetUserByUsername_Call) RunAndReturn(run func(ctx context.Context, username string) (db.User, error)) *UserStore_GetUserByUsername_Call {
+func (_c *UserStore_GetUserByUsername_Call) RunAndReturn(run func(ctx context.Context, username string) (store.User, error)) *UserStore_GetUserByUsername_Call {
 	_c.Call.Return(run)
 	return _c
 }

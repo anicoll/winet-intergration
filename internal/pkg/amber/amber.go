@@ -12,7 +12,7 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"go.uber.org/zap"
 
-	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
+	"github.com/anicoll/winet-integration/internal/pkg/store"
 	ac "github.com/anicoll/winet-integration/pkg/amber"
 )
 
@@ -74,7 +74,7 @@ func (c *client) GetSites() []ac.Site {
 	return c.sites
 }
 
-func (c *client) GetUsage(ctx context.Context, siteID string, startDate, endDate openapi_types.Date) ([]dbpkg.Amberusage, error) {
+func (c *client) GetUsage(ctx context.Context, siteID string, startDate, endDate openapi_types.Date) ([]store.Amberusage, error) {
 	response, err := c.aClient.GetUsageWithResponse(ctx, siteID, &ac.GetUsageParams{
 		StartDate: startDate,
 		EndDate:   endDate,
@@ -83,12 +83,12 @@ func (c *client) GetUsage(ctx context.Context, siteID string, startDate, endDate
 		return nil, err
 	}
 
-	res := []dbpkg.Amberusage{}
+	res := []store.Amberusage{}
 	if response.JSON200 == nil {
 		return res, nil
 	}
 	for _, usage := range *response.JSON200 {
-		res = append(res, dbpkg.Amberusage{
+		res = append(res, store.Amberusage{
 			PerKwh:            float64(usage.PerKwh),
 			SpotPerKwh:        float64(usage.SpotPerKwh),
 			StartTime:         usage.StartTime.In(c.loc),
@@ -104,7 +104,7 @@ func (c *client) GetUsage(ctx context.Context, siteID string, startDate, endDate
 	return res, nil
 }
 
-func (c *client) GetPrices(ctx context.Context, siteID string) ([]dbpkg.Amberprice, error) {
+func (c *client) GetPrices(ctx context.Context, siteID string) ([]store.Amberprice, error) {
 	response, err := c.aClient.GetCurrentPricesWithResponse(ctx, siteID, &ac.GetCurrentPricesParams{
 		Next:     new(1600),
 		Previous: new(400),
@@ -164,9 +164,9 @@ func (c *client) GetPrices(ctx context.Context, siteID string) ([]dbpkg.Amberpri
 		return a.StartTime.Compare(b.StartTime)
 	})
 
-	res := []dbpkg.Amberprice{}
+	res := []store.Amberprice{}
 	for _, interval := range historicalIntervals {
-		res = append(res, dbpkg.Amberprice{
+		res = append(res, store.Amberprice{
 			PerKwh:      float64(interval.PerKwh),
 			SpotPerKwh:  float64(interval.SpotPerKwh),
 			StartTime:   interval.StartTime,
@@ -177,7 +177,7 @@ func (c *client) GetPrices(ctx context.Context, siteID string) ([]dbpkg.Amberpri
 		})
 	}
 	for _, interval := range forecastIntervals {
-		res = append(res, dbpkg.Amberprice{
+		res = append(res, store.Amberprice{
 			PerKwh:      float64(interval.PerKwh),
 			SpotPerKwh:  float64(interval.SpotPerKwh),
 			StartTime:   interval.StartTime,
@@ -188,7 +188,7 @@ func (c *client) GetPrices(ctx context.Context, siteID string) ([]dbpkg.Amberpri
 		})
 	}
 	for _, interval := range currentIntervals {
-		res = append(res, dbpkg.Amberprice{
+		res = append(res, store.Amberprice{
 			PerKwh:      float64(interval.PerKwh),
 			SpotPerKwh:  float64(interval.SpotPerKwh),
 			StartTime:   interval.StartTime,

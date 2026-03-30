@@ -7,7 +7,7 @@ package mocks
 import (
 	"context"
 
-	"github.com/anicoll/winet-integration/internal/pkg/database/db"
+	"github.com/anicoll/winet-integration/internal/pkg/store"
 	"github.com/oapi-codegen/runtime/types"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -40,23 +40,23 @@ func (_m *AmberUsageFetcher) EXPECT() *AmberUsageFetcher_Expecter {
 }
 
 // GetUsage provides a mock function for the type AmberUsageFetcher
-func (_mock *AmberUsageFetcher) GetUsage(ctx context.Context, siteID string, startDate types.Date, endDate types.Date) ([]db.Amberusage, error) {
+func (_mock *AmberUsageFetcher) GetUsage(ctx context.Context, siteID string, startDate types.Date, endDate types.Date) ([]store.Amberusage, error) {
 	ret := _mock.Called(ctx, siteID, startDate, endDate)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetUsage")
 	}
 
-	var r0 []db.Amberusage
+	var r0 []store.Amberusage
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.Date, types.Date) ([]db.Amberusage, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.Date, types.Date) ([]store.Amberusage, error)); ok {
 		return returnFunc(ctx, siteID, startDate, endDate)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.Date, types.Date) []db.Amberusage); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.Date, types.Date) []store.Amberusage); ok {
 		r0 = returnFunc(ctx, siteID, startDate, endDate)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]db.Amberusage)
+			r0 = ret.Get(0).([]store.Amberusage)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, types.Date, types.Date) error); ok {
@@ -109,12 +109,12 @@ func (_c *AmberUsageFetcher_GetUsage_Call) Run(run func(ctx context.Context, sit
 	return _c
 }
 
-func (_c *AmberUsageFetcher_GetUsage_Call) Return(amberusages []db.Amberusage, err error) *AmberUsageFetcher_GetUsage_Call {
+func (_c *AmberUsageFetcher_GetUsage_Call) Return(amberusages []store.Amberusage, err error) *AmberUsageFetcher_GetUsage_Call {
 	_c.Call.Return(amberusages, err)
 	return _c
 }
 
-func (_c *AmberUsageFetcher_GetUsage_Call) RunAndReturn(run func(ctx context.Context, siteID string, startDate types.Date, endDate types.Date) ([]db.Amberusage, error)) *AmberUsageFetcher_GetUsage_Call {
+func (_c *AmberUsageFetcher_GetUsage_Call) RunAndReturn(run func(ctx context.Context, siteID string, startDate types.Date, endDate types.Date) ([]store.Amberusage, error)) *AmberUsageFetcher_GetUsage_Call {
 	_c.Call.Return(run)
 	return _c
 }

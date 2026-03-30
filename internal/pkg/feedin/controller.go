@@ -7,8 +7,8 @@ import (
 
 	"go.uber.org/zap"
 
-	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
+	"github.com/anicoll/winet-integration/internal/pkg/store"
 )
 
 const (
@@ -76,7 +76,7 @@ func (c *Controller) UpdateFromStatuses(statuses []model.DeviceStatus) {
 // Prices are passed in directly from the fetch result — no extra DB query needed.
 // It decides whether to enable feed-in based on time-of-day, sell price, inverter state,
 // and the in-memory TTL.
-func (c *Controller) Evaluate(prices []dbpkg.Amberprice) {
+func (c *Controller) Evaluate(prices []store.Amberprice) {
 	now := time.Now().In(c.location)
 
 	// Don't bother past 5:30 PM — sun is going down or feed-in is already running.
@@ -133,7 +133,7 @@ func (c *Controller) Evaluate(prices []dbpkg.Amberprice) {
 }
 
 // currentFeedinPrice returns the non-forecast feed-in Amber price covering right now.
-func currentFeedinPrice(prices []dbpkg.Amberprice) (dbpkg.Amberprice, bool) {
+func currentFeedinPrice(prices []store.Amberprice) (store.Amberprice, bool) {
 	now := time.Now().UTC()
 	for _, p := range prices {
 		if p.ChannelType != feedinChannel {
@@ -143,5 +143,5 @@ func currentFeedinPrice(prices []dbpkg.Amberprice) (dbpkg.Amberprice, bool) {
 			return p, true
 		}
 	}
-	return dbpkg.Amberprice{}, false
+	return store.Amberprice{}, false
 }

@@ -11,7 +11,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
+	"github.com/anicoll/winet-integration/internal/pkg/store"
 	"github.com/anicoll/winet-integration/pkg/hasher"
 )
 
@@ -33,12 +33,12 @@ type tokenRecord struct {
 }
 
 type UserStore interface {
-	GetUserByUsername(ctx context.Context, username string) (dbpkg.User, error)
+	GetUserByUsername(ctx context.Context, username string) (store.User, error)
 }
 
 type TokenStore interface {
-	StoreRefreshToken(ctx context.Context, arg dbpkg.StoreRefreshTokenParams) error
-	GetRefreshToken(ctx context.Context, tokenHash string) (dbpkg.RefreshToken, error)
+	StoreRefreshToken(ctx context.Context, arg store.StoreRefreshTokenParams) error
+	GetRefreshToken(ctx context.Context, tokenHash string) (store.RefreshToken, error)
 	DeleteRefreshToken(ctx context.Context, tokenHash string) error
 	DeleteExpiredRefreshTokens(ctx context.Context) error
 }
@@ -116,7 +116,7 @@ func (s *Service) Login(ctx context.Context, username, password string) (accessT
 		username:  user.Username,
 		expiresAt: expiresAt,
 	})
-	_ = s.tokenDB.StoreRefreshToken(ctx, dbpkg.StoreRefreshTokenParams{
+	_ = s.tokenDB.StoreRefreshToken(ctx, store.StoreRefreshTokenParams{
 		TokenHash: key,
 		UserID:    user.ID,
 		Username:  user.Username,

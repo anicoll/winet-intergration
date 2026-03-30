@@ -25,13 +25,13 @@ import (
 	"github.com/anicoll/winet-integration/internal/pkg/amber"
 	"github.com/anicoll/winet-integration/internal/pkg/auth"
 	"github.com/anicoll/winet-integration/internal/pkg/config"
-	"github.com/anicoll/winet-integration/internal/pkg/database"
-	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
 	"github.com/anicoll/winet-integration/internal/pkg/database/migration"
 	"github.com/anicoll/winet-integration/internal/pkg/feedin"
 	"github.com/anicoll/winet-integration/internal/pkg/mqtt"
 	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 	"github.com/anicoll/winet-integration/internal/pkg/server"
+	"github.com/anicoll/winet-integration/internal/pkg/store"
+	pgstore "github.com/anicoll/winet-integration/internal/pkg/store/postgres"
 	"github.com/anicoll/winet-integration/internal/pkg/winet"
 	api "github.com/anicoll/winet-integration/pkg/server"
 )
@@ -39,11 +39,11 @@ import (
 var errCron = errors.New("cron error")
 
 type AmberUsageFetcher interface {
-	GetUsage(ctx context.Context, siteID string, startDate, endDate openapi_types.Date) ([]dbpkg.Amberusage, error)
+	GetUsage(ctx context.Context, siteID string, startDate, endDate openapi_types.Date) ([]store.Amberusage, error)
 }
 
 type AmberUsageWriter interface {
-	WriteAmberUsage(ctx context.Context, usage []dbpkg.Amberusage) error
+	WriteAmberUsage(ctx context.Context, usage []store.Amberusage) error
 }
 
 const (
@@ -200,7 +200,7 @@ func setupLogger(logLevel string) (*zap.Logger, error) {
 	return logger, nil
 }
 
-func setupDatabase(ctx context.Context, dsn, migrationsPath string) (*database.Database, func(), error) {
+func setupDatabase(ctx context.Context, dsn, migrationsPath string) (store.Store, func(), error) {
 	err := migration.Migrate(dsn, migrationsPath)
 	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return nil, nil, fmt.Errorf("failed to run migrations: %w", err)
@@ -214,10 +214,10 @@ func setupDatabase(ctx context.Context, dsn, migrationsPath string) (*database.D
 		return nil, nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	return database.NewDatabase(pool), pool.Close, nil
+	return pgstore.New(pool), pool.Close, nil
 }
 
-func startAmberPriceService(ctx context.Context, amberCfg *config.AmberConfig, db *database.Database, errChan chan error, logger *zap.Logger, onPriceUpdate func([]dbpkg.Amberprice)) error {
+func startAmberPriceService(ctx context.Context, amberCfg *config.AmberConfig, db store.Store, errChan chan error, logger *zap.Logger, onPriceUpdate func([]store.Amberprice)) error {
 	logger.Info("Starting amber price service")
 
 	if amberCfg == nil || amberCfg.Host == "" || amberCfg.Token == "" {
@@ -271,7 +271,7 @@ func startAmberPriceService(ctx context.Context, amberCfg *config.AmberConfig, d
 	return ctx.Err()
 }
 
-func startAmberUsageService(ctx context.Context, amberCfg *config.AmberConfig, db *database.Database, errChan chan error, logger *zap.Logger) error {
+func startAmberUsageService(ctx context.Context, amberCfg *config.AmberConfig, db store.Store, errChan chan error, logger *zap.Logger) error {
 	logger.Info("Starting amber usage service")
 
 	if amberCfg == nil || amberCfg.Host == "" || amberCfg.Token == "" {
@@ -336,9 +336,9 @@ func fetchAndStoreUsage(ctx context.Context, svc AmberUsageFetcher, db AmberUsag
 }
 
 func fetchAndStorePrices(ctx context.Context, svc interface {
-	GetPrices(ctx context.Context, siteID string) ([]dbpkg.Amberprice, error)
-}, db *database.Database, siteId string,
-) ([]dbpkg.Amberprice, error) {
+	GetPrices(ctx context.Context, siteID string) ([]store.Amberprice, error)
+}, db store.Store, siteId string,
+) ([]store.Amberprice, error) {
 	prices, err := svc.GetPrices(ctx, siteId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get prices: %w", err)
@@ -412,7 +412,7 @@ func startWinetService(ctx context.Context, winetSvc winetSvc, health *healthSta
 	}
 }
 
-func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db *database.Database, authSvc *auth.Service, health *healthState, allowedOrigins []string, secureCookies bool, logger *zap.Logger) error {
+func startHTTPServer(ctx context.Context, winetSvc server.WinetService, db store.Store, authSvc *auth.Service, health *healthState, allowedOrigins []string, secureCookies bool, logger *zap.Logger) error {
 	logger.Info("Starting HTTP server", zap.String("addr", serverAddr))
 
 	apiHandler := api.HandlerWithOptions(server.New(winetSvc, db, authSvc, secureCookies), api.StdHTTPServerOptions{

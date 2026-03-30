@@ -14,7 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/anicoll/winet-integration/internal/pkg/auth"
-	dbpkg "github.com/anicoll/winet-integration/internal/pkg/database/db"
+	"github.com/anicoll/winet-integration/internal/pkg/store"
 	authmocks "github.com/anicoll/winet-integration/mocks/auth"
 )
 
@@ -35,7 +35,7 @@ func newMiddlewareAuthService(t *testing.T) *auth.Service {
 	require.NoError(t, err)
 
 	us := authmocks.NewUserStore(t)
-	us.EXPECT().GetUserByUsername(mock.Anything, mock.Anything).Return(dbpkg.User{
+	us.EXPECT().GetUserByUsername(mock.Anything, mock.Anything).Return(store.User{
 		ID:           1,
 		Username:     middlewareTestUsername,
 		PasswordHash: string(h),
@@ -43,7 +43,7 @@ func newMiddlewareAuthService(t *testing.T) *auth.Service {
 
 	ts := authmocks.NewTokenStore(t)
 	ts.EXPECT().StoreRefreshToken(mock.Anything, mock.Anything).Return(nil).Maybe()
-	ts.EXPECT().GetRefreshToken(mock.Anything, mock.Anything).Return(dbpkg.RefreshToken{}, errors.New("not found")).Maybe()
+	ts.EXPECT().GetRefreshToken(mock.Anything, mock.Anything).Return(store.RefreshToken{}, errors.New("not found")).Maybe()
 	ts.EXPECT().DeleteRefreshToken(mock.Anything, mock.Anything).Return(nil).Maybe()
 	ts.EXPECT().DeleteExpiredRefreshTokens(mock.Anything).Return(nil).Maybe()
 
