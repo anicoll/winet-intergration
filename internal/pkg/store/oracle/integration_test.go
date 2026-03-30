@@ -1,83 +1,110 @@
-// Run with: go test -v ./internal/pkg/store/postgres/...
+// Run with: go test -v ./internal/pkg/store/oracle/...
 //
-// A PostgreSQL container is started automatically via testcontainers.
-package postgres_test
+// A free Oracle container (gvenzl/oracle-free) is started automatically via
+// testcontainers. The container is shared across the entire suite.
+//
+// Oracle Free starts slowly (~60-90s on first pull). Subsequent runs reuse the
+// cached image and start in ~20s.
+package oracle_test
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/sijms/go-ora/v2"
 	"github.com/stretchr/testify/suite"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/anicoll/winet-integration/internal/pkg/database/migration"
 	"github.com/anicoll/winet-integration/internal/pkg/model"
 	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 	"github.com/anicoll/winet-integration/internal/pkg/store"
-	pgstore "github.com/anicoll/winet-integration/internal/pkg/store/postgres"
+	orastore "github.com/anicoll/winet-integration/internal/pkg/store/oracle"
 )
 
-// migrationsPath resolves the postgres migrations directory relative to this
+const (
+	oracleImage    = "gvenzl/oracle-free:23-slim-faststart"
+	oraclePassword = "TestPassword1"
+	oracleService  = "FREEPDB1"
+	oracleUser     = "system"
+	oraclePort     = "1521/tcp"
+)
+
+// migrationsPath resolves the oracle migrations directory relative to this
 // test file, regardless of where `go test` is invoked from.
 func migrationsPath() string {
 	_, file, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(file), "../../../../migrations/postgres")
+	return filepath.Join(filepath.Dir(file), "../../../../migrations/oracle")
 }
 
-// PostgresSuite starts a single container for the entire suite.
-type PostgresSuite struct {
+// OracleSuite starts a single Oracle Free container for the entire suite.
+type OracleSuite struct {
 	suite.Suite
-	container *postgres.PostgresContainer
-	store     *pgstore.Store
+	container testcontainers.Container
+	store     *orastore.Store
 }
 
-func TestPostgresSuite(t *testing.T) {
-	suite.Run(t, new(PostgresSuite))
+func TestOracleSuite(t *testing.T) {
+	suite.Run(t, new(OracleSuite))
 }
 
-func (s *PostgresSuite) SetupSuite() {
+func (s *OracleSuite) SetupSuite() {
 	ctx := context.Background()
 
-	ctr, err := postgres.Run(ctx,
-		"postgres:16-alpine",
-		postgres.WithDatabase("winet_test"),
-		postgres.WithUsername("postgres"),
-		postgres.WithPassword("postgres"),
-		postgres.BasicWaitStrategies(),
-	)
+	req := testcontainers.ContainerRequest{
+		Image:        oracleImage,
+		ExposedPorts: []string{oraclePort},
+		Env: map[string]string{
+			"ORACLE_PASSWORD": oraclePassword,
+		},
+		WaitingFor: wait.ForLog("DATABASE IS READY TO USE!").
+			WithStartupTimeout(5 * time.Minute),
+	}
+
+	ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
 	s.Require().NoError(err)
 	s.container = ctr
 
-	dsn, err := ctr.ConnectionString(ctx, "sslmode=disable")
+	host, err := ctr.Host(ctx)
+	s.Require().NoError(err)
+	mappedPort, err := ctr.MappedPort(ctx, oraclePort)
 	s.Require().NoError(err)
 
-	s.Require().NoError(migration.Migrate("postgres", dsn, migrationsPath()))
+	dsn := fmt.Sprintf("oracle://%s:%s@%s:%s/%s",
+		oracleUser, oraclePassword, host, mappedPort.Port(), oracleService)
 
-	pool, err := pgxpool.New(ctx, dsn)
+	s.Require().NoError(migration.Migrate("oracle", dsn, migrationsPath()))
+
+	db, err := sql.Open("oracle", dsn)
 	s.Require().NoError(err)
-	s.Require().NoError(pool.Ping(ctx))
+	s.Require().NoError(db.PingContext(ctx))
 
-	s.store = pgstore.New(pool)
+	s.store = orastore.New(db)
 }
 
-func (s *PostgresSuite) TearDownSuite() {
+func (s *OracleSuite) TearDownSuite() {
 	if s.container != nil {
 		_ = s.container.Terminate(context.Background())
 	}
 }
 
-func (s *PostgresSuite) TestWrite_and_GetLatestProperties() {
+func (s *OracleSuite) TestWrite_and_GetLatestProperties() {
 	ctx := context.Background()
 
 	dp := publisher.DataPoint{
-		Timestamp:         time.Now().UTC().Truncate(time.Millisecond),
+		Timestamp:         time.Now().UTC().Truncate(time.Second),
 		UnitOfMeasurement: "W",
 		Value:             "42.5",
-		Identifier:        "SN-TEST-001",
+		Identifier:        "SN-ORA-001",
 		Slug:              "battery-power",
 	}
 
@@ -96,15 +123,15 @@ func (s *PostgresSuite) TestWrite_and_GetLatestProperties() {
 	s.True(found, "written data point not found in GetLatestProperties")
 }
 
-func (s *PostgresSuite) TestRegisterDevice() {
+func (s *OracleSuite) TestRegisterDevice() {
 	ctx := context.Background()
 
-	dev := &model.Device{ID: "pg-integration-device", Model: "TestModel", SerialNumber: "SN-IT-001"}
+	dev := &model.Device{ID: "oracle-integration-device", Model: "TestModel", SerialNumber: "SN-ORA-IT-001"}
 	s.Require().NoError(s.store.RegisterDevice(ctx, dev))
 	s.Require().NoError(s.store.RegisterDevice(ctx, dev), "second upsert must be idempotent")
 }
 
-func (s *PostgresSuite) TestWriteAmberPrices_and_GetAmberPrices() {
+func (s *OracleSuite) TestWriteAmberPrices_and_GetAmberPrices() {
 	ctx := context.Background()
 
 	now := time.Now().UTC().Truncate(time.Second)
@@ -128,7 +155,7 @@ func (s *PostgresSuite) TestWriteAmberPrices_and_GetAmberPrices() {
 	s.Equal(prices[0].PerKwh, got[0].PerKwh)
 }
 
-func (s *PostgresSuite) TestWriteAmberUsage_and_GetAmberUsage() {
+func (s *OracleSuite) TestWriteAmberUsage_and_GetAmberUsage() {
 	ctx := context.Background()
 
 	now := time.Now().UTC().Truncate(time.Second)
@@ -155,19 +182,19 @@ func (s *PostgresSuite) TestWriteAmberUsage_and_GetAmberUsage() {
 	s.InDelta(usage[0].Kwh, got[0].Kwh, 0.001)
 }
 
-func (s *PostgresSuite) TestUserAndRefreshToken() {
+func (s *OracleSuite) TestUserAndRefreshToken() {
 	ctx := context.Background()
 
-	user, err := s.store.CreateUser(ctx, "pg-integration-user", "$2a$10$placeholder")
+	user, err := s.store.CreateUser(ctx, "oracle-integration-user", "$2a$10$placeholder")
 	s.Require().NoError(err)
-	s.Equal("pg-integration-user", user.Username)
+	s.Equal("oracle-integration-user", user.Username)
 
 	fetched, err := s.store.GetUserByUsername(ctx, user.Username)
 	s.Require().NoError(err)
 	s.Equal(user.ID, fetched.ID)
 
 	params := store.StoreRefreshTokenParams{
-		TokenHash: "pg-test-hash-integration",
+		TokenHash: "ora-test-hash-integration",
 		UserID:    user.ID,
 		Username:  user.Username,
 		ExpiresAt: time.Now().Add(time.Hour),
