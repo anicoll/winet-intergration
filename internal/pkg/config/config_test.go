@@ -52,7 +52,7 @@ func TestLoad_Defaults(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "info", cfg.LogLevel)
-	assert.Equal(t, "migrations", cfg.MigrationsFolder)
+	assert.Equal(t, "", cfg.MigrationsFolder)
 	assert.Equal(t, "Australia/Adelaide", cfg.Timezone)
 	assert.Equal(t, 30*time.Second, cfg.WinetCfg.PollInterval)
 	assert.False(t, cfg.WinetCfg.Ssl)
