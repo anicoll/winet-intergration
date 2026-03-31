@@ -209,6 +209,9 @@ func setupDatabase(ctx context.Context, driver, dsn, migrationsPath string, orac
 
 	switch driver {
 	case "oracle":
+		if oracleCfg.Host == "" || oracleCfg.Service == "" || oracleCfg.User == "" || oracleCfg.Password == "" {
+			return nil, nil, fmt.Errorf("ORACLE_HOST, ORACLE_SERVICE, ORACLE_USER and ORACLE_PASSWORD are required when DB_DRIVER=oracle")
+		}
 		urlOptions := map[string]string{
 			"ssl": "true",
 		}

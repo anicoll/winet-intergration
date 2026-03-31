@@ -58,13 +58,13 @@ type AuthConfig struct {
 }
 
 // OracleConfig holds Oracle connection parameters for SSL connections.
-// Used when DB_DRIVER=oracle.
+// Used when DB_DRIVER=oracle. Fields are validated at connection time, not at Load().
 type OracleConfig struct {
-	Host       string `env:"ORACLE_HOST,required"`
-	Port       int    `env:"ORACLE_PORT"        envDefault:"1522"`
-	Service    string `env:"ORACLE_SERVICE,required"`
-	User       string `env:"ORACLE_USER,required"`
-	Password   string `env:"ORACLE_PASSWORD,required"`
-	SSLVerify  bool   `env:"ORACLE_SSL_VERIFY"  envDefault:"true"`
+	Host       string `env:"ORACLE_HOST"`
+	Port       int    `env:"ORACLE_PORT"       envDefault:"1522"`
+	Service    string `env:"ORACLE_SERVICE"`
+	User       string `env:"ORACLE_USER"`
+	Password   string `env:"ORACLE_PASSWORD"`
+	SSLVerify  bool   `env:"ORACLE_SSL_VERIFY" envDefault:"true"`
 	WalletPath string `env:"ORACLE_WALLET"`
 }
