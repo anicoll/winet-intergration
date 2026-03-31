@@ -72,7 +72,6 @@ type service struct {
 	cfg        *config.WinetConfig
 	properties map[string]string
 	conn       ws.Connection
-	errChan    chan error
 	events     chan SessionEvent
 	token      string
 	logger     *zap.Logger
@@ -97,11 +96,10 @@ func (s *service) SetDeviceStatusHook(fn func(statuses []model.DeviceStatus)) {
 	s.onDeviceStatuses = fn
 }
 
-func New(cfg *config.WinetConfig, pub publisher.DataPublisher, errChan chan error) *service {
+func New(cfg *config.WinetConfig, pub publisher.DataPublisher) *service {
 	return &service{
 		cfg:        cfg,
 		publisher:  pub,
-		errChan:    errChan,
 		logger:     zap.L(),
 		storedData: []byte{},
 		events:     make(chan SessionEvent, 1),
@@ -114,10 +112,19 @@ func (s *service) Events() <-chan SessionEvent {
 	return s.events
 }
 
+// sendIfErr logs err and signals a reconnect via the events channel.
+// It is non-blocking and suppressed during shutdown — it can never crash the app.
 func (s *service) sendIfErr(err error) {
-	if err != nil {
-		s.logger.Error("failed due to an error", zap.Error(err))
-		s.errChan <- err
+	if err == nil {
+		return
+	}
+	s.logger.Error("failed due to an error", zap.Error(err))
+	if s.ctx == nil || s.ctx.Err() != nil {
+		return
+	}
+	select {
+	case s.events <- SessionEvent{Err: err}:
+	default: // reconnect already signalled
 	}
 }
 

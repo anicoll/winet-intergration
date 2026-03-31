@@ -215,3 +215,36 @@ func TestStartWinetService_ConnectError_RetriesUntilContextCancelled(t *testing.
 
 	assert.ErrorIs(t, err, context.Canceled)
 }
+
+// TestStartWinetService_RepeatedCrashesAlwaysReconnect is the crashloop regression
+// test: the winet device resets the connection 5 times in quick succession. The
+// service must reconnect each time and NEVER return a winet error to the caller
+// (which would cancel the errgroup and kill the HTTP server).
+func TestStartWinetService_RepeatedCrashesAlwaysReconnect(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Five crash events: a mix of connection resets and timeouts.
+	events := makeEvents(
+		winet.SessionEvent{Err: errors.New("read tcp: connection reset by peer")},
+		winet.SessionEvent{Err: winet.ErrTimeout},
+		winet.SessionEvent{Err: errors.New("read tcp: connection reset by peer")},
+		winet.SessionEvent{Err: errors.New("EOF")},
+		winet.SessionEvent{Err: winet.ErrTimeout},
+	)
+
+	svc := cmdmocks.NewWinetConnector(t)
+	svc.EXPECT().Events().Return(events)
+	// First 5 Connects succeed; 6th cancels the context to stop the loop.
+	svc.EXPECT().Connect(mock.Anything).Return(nil).Times(5)
+	svc.EXPECT().Connect(mock.Anything).RunAndReturn(func(ctx context.Context) error {
+		cancel()
+		return nil
+	}).Once()
+
+	err := startWinetService(ctx, svc, &healthState{}, zap.NewNop())
+
+	// Must exit with context.Canceled — NOT a winet error — so the errgroup
+	// does not propagate a crash to the HTTP server or amber services.
+	assert.ErrorIs(t, err, context.Canceled)
+}
