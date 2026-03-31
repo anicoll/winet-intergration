@@ -55,11 +55,11 @@ func (s *PostgresSuite) SetupSuite() {
 	dsn, err := ctr.ConnectionString(ctx, "sslmode=disable")
 	s.Require().NoError(err)
 
-	s.Require().NoError(migration.Migrate("postgres", dsn, migrationsPath()))
-
 	pool, err := pgxpool.New(ctx, dsn)
 	s.Require().NoError(err)
 	s.Require().NoError(pool.Ping(ctx))
+
+	s.Require().NoError(migration.MigratePostgres(pool, migrationsPath()))
 
 	s.store = pgstore.New(pool)
 }

@@ -19,14 +19,20 @@ func (s *Store) Write(ctx context.Context, data []publisher.DataPoint) error {
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO Property (time_stamp, unit_of_measurement, value, identifier, slug)
-		VALUES (:1, :2, :3, :4, :5)`)
+		VALUES (:time_stamp, NVL(:unit_of_measurement, '-'), :value, :identifier, :slug)`)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = stmt.Close() }()
 
 	for _, dp := range data {
-		if _, err := stmt.ExecContext(ctx, dp.Timestamp, dp.UnitOfMeasurement, dp.Value, dp.Identifier, dp.Slug); err != nil {
+		if _, err := stmt.ExecContext(ctx,
+			sql.Named("time_stamp", dp.Timestamp),
+			sql.Named("unit_of_measurement", dp.UnitOfMeasurement),
+			sql.Named("value", dp.Value),
+			sql.Named("identifier", dp.Identifier),
+			sql.Named("slug", dp.Slug),
+		); err != nil {
 			return err
 		}
 	}

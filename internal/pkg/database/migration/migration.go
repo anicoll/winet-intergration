@@ -10,60 +10,37 @@ import (
 	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/sijms/go-ora/v2"
 )
 
-// Migrate runs up migrations for the given driver.
-//
-// For "postgres" it uses golang-migrate with the pgx/v5 driver.
-// For "oracle" it applies SQL files directly via database/sql, tracking applied
-// migrations in a schema_migrations table (golang-migrate has no Oracle driver).
-func Migrate(driver, dsn, folderPath string) error {
-	switch driver {
-	case "oracle":
-		return migrateOracle(dsn, folderPath)
-	default:
-		return migratePostgres(dsn, folderPath)
-	}
-}
+// MigratePostgres runs up migrations against an existing pgxpool.Pool.
+func MigratePostgres(pool *pgxpool.Pool, folderPath string) error {
+	db := stdlib.OpenDBFromPool(pool)
+	defer func() { _ = db.Close() }()
 
-func migratePostgres(dsn, folderPath string) error {
-	m, err := migrate.New("file://"+folderPath, dsn)
+	driver, err := postgres.WithInstance(db, &postgres.Config{})
 	if err != nil {
-		return err
+		return fmt.Errorf("postgres migration: create driver: %w", err)
 	}
+
+	m, err := migrate.NewWithDatabaseInstance("file://"+folderPath, "postgres", driver)
+	if err != nil {
+		return fmt.Errorf("postgres migration: init: %w", err)
+	}
+
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		return err
+		return fmt.Errorf("postgres migration: up: %w", err)
 	}
 	return nil
 }
 
-// splitStatements splits a SQL file containing multiple statements separated by
-// semicolons, returning only non-empty trimmed statements. Oracle requires each
-// statement to be executed individually.
-func splitStatements(sql string) []string {
-	var out []string
-	for s := range strings.SplitSeq(sql, ";") {
-		if trimmed := strings.TrimSpace(s); trimmed != "" {
-			out = append(out, trimmed)
-		}
-	}
-	return out
-}
-
-// migrateOracle applies *.up.sql files in lexicographic order, skipping any
-// that have already been recorded in the schema_migrations table.
-func migrateOracle(dsn, folderPath string) error {
+// MigrateOracle runs up migrations against an existing *sql.DB opened with the oracle driver.
+func MigrateOracle(db *sql.DB, folderPath string) error {
 	ctx := context.Background()
-
-	db, err := sql.Open("oracle", dsn)
-	if err != nil {
-		return fmt.Errorf("oracle migration: open: %w", err)
-	}
-	defer func() { _ = db.Close() }()
 
 	if _, err := db.ExecContext(ctx, `
 		BEGIN
@@ -122,4 +99,16 @@ func migrateOracle(dsn, folderPath string) error {
 		}
 	}
 	return nil
+}
+
+// splitStatements splits a SQL file containing multiple statements separated by
+// semicolons, returning only non-empty trimmed statements.
+func splitStatements(sql string) []string {
+	var out []string
+	for s := range strings.SplitSeq(sql, ";") {
+		if trimmed := strings.TrimSpace(s); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }

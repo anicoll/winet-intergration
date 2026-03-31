@@ -82,11 +82,11 @@ func (s *OracleSuite) SetupSuite() {
 	dsn := fmt.Sprintf("oracle://%s:%s@%s:%s/%s",
 		oracleUser, oraclePassword, host, mappedPort.Port(), oracleService)
 
-	s.Require().NoError(migration.Migrate("oracle", dsn, migrationsPath()))
-
 	db, err := sql.Open("oracle", dsn)
 	s.Require().NoError(err)
 	s.Require().NoError(db.PingContext(ctx))
+
+	s.Require().NoError(migration.MigrateOracle(db, migrationsPath()))
 
 	s.store = orastore.New(db)
 }

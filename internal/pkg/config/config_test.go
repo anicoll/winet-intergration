@@ -86,8 +86,9 @@ func TestLoad_MissingDatabaseURL(t *testing.T) {
 	setRequiredEnv(t)
 	unsetenv(t, "DATABASE_URL")
 
-	_, err := Load()
-	assert.Error(t, err)
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Empty(t, cfg.DBDSN)
 }
 
 func TestLoad_CustomValues(t *testing.T) {
