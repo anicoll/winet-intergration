@@ -209,11 +209,14 @@ func (s *service) onError(err error) {
 	if errors.Is(err, io.EOF) {
 		return
 	}
+	s.logger.Error("failed due to an error", zap.Error(err))
 	if s.ctx != nil && s.ctx.Err() != nil {
-		s.logger.Error("failed due to an error", zap.Error(err))
 		return
 	}
-	s.sendIfErr(err)
+	select {
+	case s.events <- SessionEvent{Err: err}:
+	default:
+	}
 }
 
 func (s *service) reconnect(ctx context.Context) error {

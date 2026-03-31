@@ -383,12 +383,12 @@ func fetchAndStorePrices(ctx context.Context, svc interface {
 	return prices, nil
 }
 
-type winetSvc interface {
+type WinetConnector interface {
 	Connect(ctx context.Context) error
 	Events() <-chan winet.SessionEvent
 }
 
-func startWinetService(ctx context.Context, winetSvc winetSvc, health *healthState, logger *zap.Logger) error {
+func startWinetService(ctx context.Context, winetSvc WinetConnector, health *healthState, logger *zap.Logger) error {
 	logger.Info("Starting winet service")
 	consecutiveFails := 0
 
@@ -432,10 +432,10 @@ func startWinetService(ctx context.Context, winetSvc winetSvc, health *healthSta
 		case event := <-winetSvc.Events():
 			if errors.Is(event.Err, winet.ErrTimeout) {
 				logger.Warn("winet timeout occurred, reconnecting", zap.Error(event.Err))
-				continue
+			} else {
+				logger.Warn("winet connection error, reconnecting", zap.Error(event.Err))
 			}
-			logger.Error("winet service error", zap.Error(event.Err))
-			return event.Err
+			continue
 		case <-ctx.Done():
 			health.set("disconnected")
 			logger.Info("Winet service stopped")
