@@ -21,9 +21,9 @@ import (
 	go_ora "github.com/sijms/go-ora/v2"
 
 	"github.com/anicoll/winet-integration/internal/pkg/config"
-	"github.com/anicoll/winet-integration/pkg/hasher"
 	orastore "github.com/anicoll/winet-integration/internal/pkg/store/oracle"
 	pgstore "github.com/anicoll/winet-integration/internal/pkg/store/postgres"
+	"github.com/anicoll/winet-integration/pkg/hasher"
 )
 
 func main() {
