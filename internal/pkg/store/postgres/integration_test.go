@@ -36,6 +36,7 @@ type PostgresSuite struct {
 }
 
 func TestPostgresSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(PostgresSuite))
 }
 

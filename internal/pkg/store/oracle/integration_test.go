@@ -51,6 +51,7 @@ type OracleSuite struct {
 }
 
 func TestOracleSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(OracleSuite))
 }
 
