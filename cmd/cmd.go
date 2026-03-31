@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"math/rand/v2"
@@ -14,13 +15,11 @@ import (
 	"syscall"
 	"time"
 
-	"database/sql"
-
 	paho_mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/jackc/pgx/v5/pgxpool"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/robfig/cron/v3"
-	_ "github.com/sijms/go-ora/v2"
+	go_ora "github.com/sijms/go-ora/v2"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
@@ -108,7 +107,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	}()
 
 	// Initialize database connection
-	db, cleanup, err := setupDatabase(ctx, cfg.DBDriver, cfg.DBDSN, cfg.MigrationsFolder)
+	db, cleanup, err := setupDatabase(ctx, cfg.DBDriver, cfg.DBDSN, cfg.MigrationsFolder, &cfg.OracleCfg)
 	if err != nil {
 		return fmt.Errorf("failed to setup database: %w", err)
 	}
@@ -203,35 +202,45 @@ func setupLogger(logLevel string) (*zap.Logger, error) {
 	return logger, nil
 }
 
-func setupDatabase(ctx context.Context, driver, dsn, migrationsPath string) (store.Store, func(), error) {
+func setupDatabase(ctx context.Context, driver, dsn, migrationsPath string, oracleCfg *config.OracleConfig) (store.Store, func(), error) {
 	if migrationsPath == "" {
 		migrationsPath = "migrations/" + driver
 	}
 
 	switch driver {
 	case "oracle":
-		if err := migration.Migrate(driver, dsn, migrationsPath); err != nil {
-			return nil, nil, fmt.Errorf("failed to run oracle migrations: %w", err)
+		urlOptions := map[string]string{
+			"ssl": "true",
 		}
-		db, err := sql.Open("oracle", dsn)
+		if !oracleCfg.SSLVerify {
+			urlOptions["ssl verify"] = "false"
+		}
+		if oracleCfg.WalletPath != "" {
+			urlOptions["wallet"] = oracleCfg.WalletPath
+		}
+		connStr := go_ora.BuildUrl(oracleCfg.Host, oracleCfg.Port, oracleCfg.Service, oracleCfg.User, oracleCfg.Password, urlOptions)
+		db, err := sql.Open("oracle", connStr)
 		if err != nil {
 			return nil, nil, fmt.Errorf("open oracle connection: %w", err)
 		}
 		if err := db.PingContext(ctx); err != nil {
 			return nil, nil, fmt.Errorf("failed to connect to oracle: %w", err)
 		}
+		if err := migration.MigrateOracle(db, migrationsPath); err != nil {
+			return nil, nil, fmt.Errorf("failed to run oracle migrations: %w", err)
+		}
 		return orastore.New(db), func() { _ = db.Close() }, nil
 
 	default: // "postgres"
-		if err := migration.Migrate(driver, dsn, migrationsPath); err != nil {
-			return nil, nil, fmt.Errorf("failed to run migrations: %w", err)
-		}
 		pool, err := pgxpool.New(ctx, dsn)
 		if err != nil {
 			return nil, nil, err
 		}
 		if err := pool.Ping(ctx); err != nil {
 			return nil, nil, fmt.Errorf("failed to connect to database: %w", err)
+		}
+		if err := migration.MigratePostgres(pool, migrationsPath); err != nil {
+			return nil, nil, fmt.Errorf("failed to run migrations: %w", err)
 		}
 		return pgstore.New(pool), pool.Close, nil
 	}
