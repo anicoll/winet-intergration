@@ -19,13 +19,16 @@ var upgrader = websocket.Upgrader{
 
 type testServer struct {
 	*httptest.Server
-	url    string
-	conn   *websocket.Conn
-	connMu sync.Mutex
+	url       string
+	conn      *websocket.Conn
+	connMu    sync.Mutex
+	connected chan struct{} // closed once ts.conn is set
 }
 
 func newTestServer(t *testing.T) *testServer {
-	ts := &testServer{}
+	ts := &testServer{
+		connected: make(chan struct{}),
+	}
 
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := upgrader.Upgrade(w, r, nil)
@@ -34,6 +37,7 @@ func newTestServer(t *testing.T) *testServer {
 		ts.connMu.Lock()
 		ts.conn = c
 		ts.connMu.Unlock()
+		close(ts.connected)
 	}))
 
 	ts.Server = s
@@ -42,6 +46,7 @@ func newTestServer(t *testing.T) *testServer {
 }
 
 func (ts *testServer) sendMessage(msg []byte) error {
+	<-ts.connected
 	ts.connMu.Lock()
 	defer ts.connMu.Unlock()
 	return ts.conn.WriteMessage(websocket.TextMessage, msg)
@@ -232,7 +237,7 @@ func TestPing(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	t.Run("close stops readLoop", func(t *testing.T) {
+	t.Run("close_stops_readLoop", func(t *testing.T) {
 		server := newTestServer(t)
 		defer server.Close()
 
