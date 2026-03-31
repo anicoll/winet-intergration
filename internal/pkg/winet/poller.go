@@ -35,7 +35,7 @@ func (s *service) runPollLoop(ctx context.Context) {
 		if s.conn == nil {
 			return
 		}
-		s.sendDeviceListRequest(s.conn)
+		s.sendDeviceListRequest(ctx, s.conn)
 
 		v, err := s.pending.wait(ctx)
 		if err != nil {

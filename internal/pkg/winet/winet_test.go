@@ -307,7 +307,7 @@ func TestSendDeviceListRequest_SendsCorrectPayload(t *testing.T) {
 		return nil
 	})
 
-	svc.sendDeviceListRequest(conn)
+	svc.sendDeviceListRequest(context.Background(), conn)
 
 	var req model.DeviceListRequest
 	require.NoError(t, json.Unmarshal(captured.Body, &req))
@@ -321,13 +321,119 @@ func TestSendDeviceListRequest_SendError_RoutesToErrChan(t *testing.T) {
 	conn := socketsmocks.NewConnection(t)
 	conn.EXPECT().Send(mock.Anything).Return(errors.New("send failed"))
 
-	svc.sendDeviceListRequest(conn)
+	svc.sendDeviceListRequest(context.Background(), conn)
 
 	select {
 	case err := <-svc.errChan:
 		assert.ErrorContains(t, err, "send failed")
 	default:
 		t.Fatal("expected error on errChan")
+	}
+}
+
+// --- reconnect / context-cancellation fixes ---
+
+// TestSendDeviceListRequest_CancelledContext_SuppressesErrChan covers the fix in login.go:
+// when the poll context is cancelled (reconnect in progress), a Send failure must not
+// propagate to errChan and crash the app.
+func TestSendDeviceListRequest_CancelledContext_SuppressesErrChan(t *testing.T) {
+	svc := newTestService()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	conn := socketsmocks.NewConnection(t)
+	conn.EXPECT().Send(mock.Anything).Return(errors.New("connection not established"))
+
+	svc.sendDeviceListRequest(ctx, conn)
+
+	select {
+	case err := <-svc.errChan:
+		t.Fatalf("errChan must be silent when context is cancelled, got: %v", err)
+	default:
+	}
+}
+
+// TestQueryDevices_CancelledContext_SendQueryErrorSuppressed covers the fix in poller.go:
+// a sendQueryRequest failure that occurs because the poll context was cancelled for
+// reconnection must not reach errChan.
+func TestQueryDevices_CancelledContext_SendQueryErrorSuppressed(t *testing.T) {
+	svc := newTestService()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	conn := socketsmocks.NewConnection(t)
+	conn.EXPECT().Send(mock.Anything).Return(errors.New("connection not established"))
+	svc.conn = conn
+
+	svc.queryDevices(ctx, []model.DeviceListObject{
+		{DeviceID: 1, DevModel: "XH3000", DevSN: "SN001", DevType: model.DeviceTypeInverter},
+	})
+
+	select {
+	case err := <-svc.errChan:
+		t.Fatalf("errChan must be silent when context is cancelled, got: %v", err)
+	default:
+	}
+}
+
+// TestQueryDevices_CancelledContext_RegisterDeviceErrorSuppressed covers the fix in poller.go:
+// a RegisterDevice failure (e.g. ORA-01013 from a cancelled DB context) must not reach
+// errChan when the poll context is already cancelled.
+func TestQueryDevices_CancelledContext_RegisterDeviceErrorSuppressed(t *testing.T) {
+	pub := publishermocks.NewDataPublisher(t)
+	svc := New(&config.WinetConfig{}, pub, make(chan error, 32))
+	svc.ctx = context.Background()
+	svc.properties = map[string]string{}
+	svc.loginReady = make(chan struct{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	pub.EXPECT().RegisterDevice(mock.Anything, mock.Anything).Return(errors.New("db context cancelled"))
+
+	// conn is nil so the device-stages loop exits immediately after RegisterDevice.
+	svc.queryDevices(ctx, []model.DeviceListObject{
+		{DeviceID: 1, DevModel: "XH3000", DevSN: "SN001", DevType: model.DeviceTypeInverter},
+	})
+
+	select {
+	case err := <-svc.errChan:
+		t.Fatalf("errChan must be silent when context is cancelled, got: %v", err)
+	default:
+	}
+}
+
+// TestOnError_CancelledMainContext_SuppressesErrChan covers the fix in winet.go:
+// when the main context is done (e.g. errgroup cancelled the app), errors from the
+// sockets layer during Dial (e.g. "operation was canceled") must not be sent to errChan
+// where no goroutine is reading, which would cause a deadlock.
+func TestOnError_CancelledMainContext_SuppressesErrChan(t *testing.T) {
+	svc := newTestService()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	svc.ctx = ctx
+
+	svc.onError(errors.New("dial tcp 192.168.1.1:443: operation was canceled"))
+
+	select {
+	case err := <-svc.errChan:
+		t.Fatalf("errChan must be silent when main context is cancelled, got: %v", err)
+	default:
+	}
+}
+
+// TestOnError_ActiveContext_SendsToErrChan ensures that onError still propagates
+// unexpected connection errors when the main context is healthy.
+func TestOnError_ActiveContext_SendsToErrChan(t *testing.T) {
+	svc := newTestService()
+
+	svc.onError(errors.New("unexpected connection drop"))
+
+	select {
+	case err := <-svc.errChan:
+		assert.ErrorContains(t, err, "unexpected connection drop")
+	default:
+		t.Fatal("expected error on errChan for active context")
 	}
 }
 

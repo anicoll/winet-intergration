@@ -1,6 +1,7 @@
 package winet
 
 import (
+	"context"
 	"encoding/json"
 
 	"go.uber.org/zap"
@@ -9,7 +10,7 @@ import (
 	ws "github.com/anicoll/winet-integration/pkg/sockets"
 )
 
-func (s *service) sendDeviceListRequest(c ws.Connection) {
+func (s *service) sendDeviceListRequest(ctx context.Context, c ws.Connection) {
 	request, err := json.Marshal(model.DeviceListRequest{
 		IsCheckToken: "0",
 		Request: model.Request{
@@ -20,11 +21,15 @@ func (s *service) sendDeviceListRequest(c ws.Connection) {
 		Type: "0",
 	})
 	if err != nil {
-		s.sendIfErr(err)
+		if ctx.Err() == nil {
+			s.sendIfErr(err)
+		}
 		return
 	}
 	if err = c.Send(ws.Msg{Body: request}); err != nil {
-		s.sendIfErr(err)
+		if ctx.Err() == nil {
+			s.sendIfErr(err)
+		}
 		return
 	}
 	s.logger.Debug("sent msg", zap.String("query_stage", model.DeviceList.String()))

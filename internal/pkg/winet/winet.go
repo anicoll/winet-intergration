@@ -209,6 +209,10 @@ func (s *service) onError(err error) {
 	if errors.Is(err, io.EOF) {
 		return
 	}
+	if s.ctx != nil && s.ctx.Err() != nil {
+		s.logger.Error("failed due to an error", zap.Error(err))
+		return
+	}
 	s.sendIfErr(err)
 }
 
