@@ -130,7 +130,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	authSvc.StartCleanup(ctx, time.Hour)
 
 	errorChan := make(chan error, errorChannelBuffer)
-	winetSvc := winet.New(&cfg.WinetCfg, pub, errorChan)
+	winetSvc := winet.New(&cfg.WinetCfg, pub)
 
 	loc, err := time.LoadLocation(cfg.Timezone)
 	if err != nil {

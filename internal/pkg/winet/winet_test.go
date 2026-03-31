@@ -29,9 +29,9 @@ func (noopPublisher) RegisterDevice(_ context.Context, _ *model.Device) error {
 	return nil
 }
 
-// newTestService creates a service with a background context and large errChan buffer.
+// newTestService creates a service wired for unit tests.
 func newTestService() *service {
-	svc := New(&config.WinetConfig{Username: "user", Password: "pass"}, noopPublisher{}, make(chan error, 32))
+	svc := New(&config.WinetConfig{Username: "user", Password: "pass"}, noopPublisher{})
 	svc.ctx = context.Background()
 	svc.properties = map[string]string{} // bypass HTTP fetch in getProperties
 	svc.loginReady = make(chan struct{}) // pre-init so handlers don't panic
@@ -41,12 +41,12 @@ func newTestService() *service {
 // --- Initialisation ---
 
 func TestNew_InitializesChannels(t *testing.T) {
-	svc := New(&config.WinetConfig{}, noopPublisher{}, make(chan error, 10))
+	svc := New(&config.WinetConfig{}, noopPublisher{})
 	assert.NotNil(t, svc.events, "events must be non-nil after New()")
 }
 
 func TestEvents_ReturnsSameChannel(t *testing.T) {
-	svc := New(&config.WinetConfig{}, noopPublisher{}, make(chan error, 10))
+	svc := New(&config.WinetConfig{}, noopPublisher{})
 	ch1 := svc.Events()
 	ch2 := svc.Events()
 	assert.Equal(t, ch1, ch2, "Events() must always return the same channel")
@@ -139,18 +139,18 @@ func TestHandleConnectMessage_SendsLoginRequest(t *testing.T) {
 	assert.Equal(t, model.Login.String(), loginReq.Service)
 }
 
-func TestHandleConnectMessage_InvalidJSON_SendsToErrChan(t *testing.T) {
+func TestHandleConnectMessage_InvalidJSON_SendsToEvents(t *testing.T) {
 	svc := newTestService()
 	conn := socketsmocks.NewConnection(t)
-	// no Send expected — invalid JSON should route to errChan, not attempt a send
+	// no Send expected — invalid JSON should signal reconnect via events, not attempt a send
 
 	svc.handleConnectMessage([]byte("not-json"), conn)
 
 	select {
-	case err := <-svc.errChan:
-		assert.Error(t, err)
+	case event := <-svc.events:
+		assert.Error(t, event.Err)
 	default:
-		t.Fatal("expected an error on errChan for invalid JSON input")
+		t.Fatal("expected an error event on events channel for invalid JSON input")
 	}
 }
 
@@ -182,8 +182,7 @@ func TestHandleLoginMessage_ClosesLoginReady(t *testing.T) {
 // (Bug #1 from the plan) is fixed and that a "login timeout" message is delivered
 // safely to the Events() channel without panicking.
 func TestOnMessage_LoginTimeout_RoutesToEventsChan(t *testing.T) {
-	errChan := make(chan error, 32)
-	svc := New(&config.WinetConfig{Host: "127.0.0.1"}, noopPublisher{}, errChan)
+	svc := New(&config.WinetConfig{Host: "127.0.0.1"}, noopPublisher{})
 	svc.ctx = context.Background()
 	svc.properties = map[string]string{}
 	svc.loginReady = make(chan struct{})
@@ -215,7 +214,7 @@ func TestOnMessage_UnknownMessage_DoesNotPanic(t *testing.T) {
 }
 
 // TestHandleConnectMessage_SendError_DoesNotPanic ensures that a connection send
-// failure is routed to errChan rather than panicking.
+// failure triggers a reconnect event rather than panicking.
 func TestHandleConnectMessage_SendError_DoesNotPanic(t *testing.T) {
 	svc := newTestService()
 
@@ -232,10 +231,10 @@ func TestHandleConnectMessage_SendError_DoesNotPanic(t *testing.T) {
 	})
 
 	select {
-	case err := <-svc.errChan:
-		assert.ErrorContains(t, err, "network write failed")
+	case event := <-svc.events:
+		assert.ErrorContains(t, event.Err, "network write failed")
 	default:
-		t.Fatal("expected send error on errChan")
+		t.Fatal("expected send error on events channel")
 	}
 }
 
@@ -283,14 +282,14 @@ func TestHandleDeviceListMessage_ValidJSON_DeliversList(t *testing.T) {
 	}
 }
 
-func TestHandleDeviceListMessage_InvalidJSON_SendsToErrChan(t *testing.T) {
+func TestHandleDeviceListMessage_InvalidJSON_SendsToEvents(t *testing.T) {
 	svc := newTestService()
 	svc.handleDeviceListMessage([]byte("not-json"), nil)
 	select {
-	case err := <-svc.errChan:
-		assert.Error(t, err)
+	case event := <-svc.events:
+		assert.Error(t, event.Err)
 	default:
-		t.Fatal("expected error on errChan")
+		t.Fatal("expected error event on events channel")
 	}
 }
 
@@ -316,7 +315,7 @@ func TestSendDeviceListRequest_SendsCorrectPayload(t *testing.T) {
 	assert.Equal(t, "0", req.Type)
 }
 
-func TestSendDeviceListRequest_SendError_RoutesToErrChan(t *testing.T) {
+func TestSendDeviceListRequest_SendError_RoutesToEvents(t *testing.T) {
 	svc := newTestService()
 	conn := socketsmocks.NewConnection(t)
 	conn.EXPECT().Send(mock.Anything).Return(errors.New("send failed"))
@@ -324,19 +323,19 @@ func TestSendDeviceListRequest_SendError_RoutesToErrChan(t *testing.T) {
 	svc.sendDeviceListRequest(context.Background(), conn)
 
 	select {
-	case err := <-svc.errChan:
-		assert.ErrorContains(t, err, "send failed")
+	case event := <-svc.events:
+		assert.ErrorContains(t, event.Err, "send failed")
 	default:
-		t.Fatal("expected error on errChan")
+		t.Fatal("expected error event on events channel")
 	}
 }
 
 // --- reconnect / context-cancellation fixes ---
 
-// TestSendDeviceListRequest_CancelledContext_SuppressesErrChan covers the fix in login.go:
+// TestSendDeviceListRequest_CancelledContext_SuppressesEvents covers the fix in login.go:
 // when the poll context is cancelled (reconnect in progress), a Send failure must not
-// propagate to errChan and crash the app.
-func TestSendDeviceListRequest_CancelledContext_SuppressesErrChan(t *testing.T) {
+// signal a reconnect — the reconnect is already in progress.
+func TestSendDeviceListRequest_CancelledContext_SuppressesEvents(t *testing.T) {
 	svc := newTestService()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -347,15 +346,15 @@ func TestSendDeviceListRequest_CancelledContext_SuppressesErrChan(t *testing.T) 
 	svc.sendDeviceListRequest(ctx, conn)
 
 	select {
-	case err := <-svc.errChan:
-		t.Fatalf("errChan must be silent when context is cancelled, got: %v", err)
+	case event := <-svc.events:
+		t.Fatalf("events must be silent when context is cancelled, got: %v", event.Err)
 	default:
 	}
 }
 
 // TestQueryDevices_CancelledContext_SendQueryErrorSuppressed covers the fix in poller.go:
 // a sendQueryRequest failure that occurs because the poll context was cancelled for
-// reconnection must not reach errChan.
+// reconnection must not signal another reconnect — one is already in progress.
 func TestQueryDevices_CancelledContext_SendQueryErrorSuppressed(t *testing.T) {
 	svc := newTestService()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -370,18 +369,18 @@ func TestQueryDevices_CancelledContext_SendQueryErrorSuppressed(t *testing.T) {
 	})
 
 	select {
-	case err := <-svc.errChan:
-		t.Fatalf("errChan must be silent when context is cancelled, got: %v", err)
+	case event := <-svc.events:
+		t.Fatalf("events must be silent when context is cancelled, got: %v", event.Err)
 	default:
 	}
 }
 
 // TestQueryDevices_CancelledContext_RegisterDeviceErrorSuppressed covers the fix in poller.go:
-// a RegisterDevice failure (e.g. ORA-01013 from a cancelled DB context) must not reach
-// errChan when the poll context is already cancelled.
+// a RegisterDevice failure (e.g. ORA-01013 from a cancelled DB context) must not signal
+// a reconnect when the poll context is already cancelled — one is already in progress.
 func TestQueryDevices_CancelledContext_RegisterDeviceErrorSuppressed(t *testing.T) {
 	pub := publishermocks.NewDataPublisher(t)
-	svc := New(&config.WinetConfig{}, pub, make(chan error, 32))
+	svc := New(&config.WinetConfig{}, pub)
 	svc.ctx = context.Background()
 	svc.properties = map[string]string{}
 	svc.loginReady = make(chan struct{})
@@ -397,17 +396,16 @@ func TestQueryDevices_CancelledContext_RegisterDeviceErrorSuppressed(t *testing.
 	})
 
 	select {
-	case err := <-svc.errChan:
-		t.Fatalf("errChan must be silent when context is cancelled, got: %v", err)
+	case event := <-svc.events:
+		t.Fatalf("events must be silent when context is cancelled, got: %v", event.Err)
 	default:
 	}
 }
 
-// TestOnError_CancelledMainContext_SuppressesErrChan covers the fix in winet.go:
+// TestOnError_CancelledMainContext_SuppressesEvents covers the fix in winet.go:
 // when the main context is done (e.g. errgroup cancelled the app), errors from the
-// sockets layer during Dial (e.g. "operation was canceled") must not be sent to errChan
-// where no goroutine is reading, which would cause a deadlock.
-func TestOnError_CancelledMainContext_SuppressesErrChan(t *testing.T) {
+// sockets layer during Dial (e.g. "operation was canceled") must be suppressed entirely.
+func TestOnError_CancelledMainContext_SuppressesEvents(t *testing.T) {
 	svc := newTestService()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -416,15 +414,14 @@ func TestOnError_CancelledMainContext_SuppressesErrChan(t *testing.T) {
 	svc.onError(errors.New("dial tcp 192.168.1.1:443: operation was canceled"))
 
 	select {
-	case err := <-svc.errChan:
-		t.Fatalf("errChan must be silent when main context is cancelled, got: %v", err)
+	case event := <-svc.events:
+		t.Fatalf("events must be silent when main context is cancelled, got: %v", event.Err)
 	default:
 	}
 }
 
 // TestOnError_ActiveContext_SendsToEvents ensures that onError routes connection
-// errors to the events channel so startWinetService can reconnect, rather than
-// crashing the app via errChan.
+// errors to the events channel so startWinetService can reconnect.
 func TestOnError_ActiveContext_SendsToEvents(t *testing.T) {
 	svc := newTestService()
 
@@ -435,12 +432,6 @@ func TestOnError_ActiveContext_SendsToEvents(t *testing.T) {
 		assert.ErrorContains(t, event.Err, "connection reset by peer")
 	default:
 		t.Fatal("expected error on events channel for active context")
-	}
-
-	select {
-	case err := <-svc.errChan:
-		t.Fatalf("errChan must not receive connection errors (would crash app), got: %v", err)
-	default:
 	}
 }
 
@@ -468,27 +459,27 @@ func TestHandleParamMessage_ValidJSON_DeliversToPending(t *testing.T) {
 	}
 }
 
-func TestHandleParamMessage_InvalidJSON_SendsToErrChan(t *testing.T) {
+func TestHandleParamMessage_InvalidJSON_SendsToEvents(t *testing.T) {
 	svc := newTestService()
 	svc.handleParamMessage([]byte("not-json"), nil)
 	select {
-	case err := <-svc.errChan:
-		assert.Error(t, err)
+	case event := <-svc.events:
+		assert.Error(t, event.Err)
 	default:
-		t.Fatal("expected error on errChan")
+		t.Fatal("expected error event on events channel")
 	}
 }
 
 // --- handleRealMessage ---
 
-func TestHandleRealMessage_InvalidJSON_SendsToErrChan(t *testing.T) {
+func TestHandleRealMessage_InvalidJSON_SendsToEvents(t *testing.T) {
 	svc := newTestService()
 	svc.handleRealMessage([]byte("not-json"))
 	select {
-	case err := <-svc.errChan:
-		assert.Error(t, err)
+	case event := <-svc.events:
+		assert.Error(t, event.Err)
 	default:
-		t.Fatal("expected error on errChan")
+		t.Fatal("expected error event on events channel")
 	}
 }
 
@@ -504,8 +495,8 @@ func TestHandleRealMessage_NilCurrentDevice_DoesNotDeliver(t *testing.T) {
 	assert.NotPanics(t, func() { svc.handleRealMessage(body) })
 
 	select {
-	case err := <-svc.errChan:
-		t.Fatalf("unexpected error: %v", err)
+	case event := <-svc.events:
+		t.Fatalf("unexpected event: %v", event.Err)
 	default:
 	}
 }
@@ -539,14 +530,14 @@ func TestHandleRealMessage_Valid_DeliversToPending(t *testing.T) {
 
 // --- handleDirectMessage ---
 
-func TestHandleDirectMessage_InvalidJSON_SendsToErrChan(t *testing.T) {
+func TestHandleDirectMessage_InvalidJSON_SendsToEvents(t *testing.T) {
 	svc := newTestService()
 	svc.handleDirectMessage([]byte("not-json"))
 	select {
-	case err := <-svc.errChan:
-		assert.Error(t, err)
+	case event := <-svc.events:
+		assert.Error(t, event.Err)
 	default:
-		t.Fatal("expected error on errChan")
+		t.Fatal("expected error event on events channel")
 	}
 }
 
@@ -561,8 +552,8 @@ func TestHandleDirectMessage_NilCurrentDevice_DoesNotDeliver(t *testing.T) {
 	assert.NotPanics(t, func() { svc.handleDirectMessage(body) })
 
 	select {
-	case err := <-svc.errChan:
-		t.Fatalf("unexpected error: %v", err)
+	case event := <-svc.events:
+		t.Fatalf("unexpected event: %v", event.Err)
 	default:
 	}
 }
@@ -701,7 +692,7 @@ func TestQueryDevices_SendsOneRequestPerStage(t *testing.T) {
 
 func TestQueryDevices_CallsRegisterDeviceOnPublisher(t *testing.T) {
 	pub := publishermocks.NewDataPublisher(t)
-	svc := New(&config.WinetConfig{}, pub, make(chan error, 32))
+	svc := New(&config.WinetConfig{}, pub)
 	svc.ctx = context.Background()
 	svc.properties = map[string]string{}
 	svc.loginReady = make(chan struct{})
@@ -723,7 +714,7 @@ func TestQueryDevices_CallsRegisterDeviceOnPublisher(t *testing.T) {
 
 func TestHandleRealMessage_CallsPublishData(t *testing.T) {
 	pub := publishermocks.NewDataPublisher(t)
-	svc := New(&config.WinetConfig{}, pub, make(chan error, 32))
+	svc := New(&config.WinetConfig{}, pub)
 	svc.ctx = context.Background()
 	svc.properties = map[string]string{}
 	svc.loginReady = make(chan struct{})
@@ -758,7 +749,7 @@ func TestHandleRealMessage_CallsPublishData(t *testing.T) {
 
 func TestHandleDirectMessage_CallsPublishData(t *testing.T) {
 	pub := publishermocks.NewDataPublisher(t)
-	svc := New(&config.WinetConfig{}, pub, make(chan error, 32))
+	svc := New(&config.WinetConfig{}, pub)
 	svc.ctx = context.Background()
 	svc.properties = map[string]string{}
 	svc.loginReady = make(chan struct{})
@@ -789,5 +780,23 @@ func TestHandleDirectMessage_CallsPublishData(t *testing.T) {
 	case <-received:
 	case <-time.After(time.Second):
 		t.Fatal("pending not delivered within 1s")
+	}
+}
+
+// --- sendIfErr crashloop regression ---
+
+// TestSendIfErr_RoutesToEventsNeverErrChan is the canonical regression test for the
+// crashloop bug: any internal winet error must route to the events channel so
+// startWinetService can reconnect — it must NEVER block-send to a fatal errChan
+// that causes handleErrors to shut down the entire application.
+func TestSendIfErr_RoutesToEventsNeverErrChan(t *testing.T) {
+	svc := newTestService()
+	svc.sendIfErr(errors.New("connection dropped unexpectedly"))
+
+	select {
+	case event := <-svc.events:
+		assert.Error(t, event.Err)
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("sendIfErr must deliver to events channel — got nothing")
 	}
 }
