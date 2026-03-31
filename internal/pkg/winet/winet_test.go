@@ -422,18 +422,25 @@ func TestOnError_CancelledMainContext_SuppressesErrChan(t *testing.T) {
 	}
 }
 
-// TestOnError_ActiveContext_SendsToErrChan ensures that onError still propagates
-// unexpected connection errors when the main context is healthy.
-func TestOnError_ActiveContext_SendsToErrChan(t *testing.T) {
+// TestOnError_ActiveContext_SendsToEvents ensures that onError routes connection
+// errors to the events channel so startWinetService can reconnect, rather than
+// crashing the app via errChan.
+func TestOnError_ActiveContext_SendsToEvents(t *testing.T) {
 	svc := newTestService()
 
-	svc.onError(errors.New("unexpected connection drop"))
+	svc.onError(errors.New("read tcp: connection reset by peer"))
+
+	select {
+	case event := <-svc.events:
+		assert.ErrorContains(t, event.Err, "connection reset by peer")
+	default:
+		t.Fatal("expected error on events channel for active context")
+	}
 
 	select {
 	case err := <-svc.errChan:
-		assert.ErrorContains(t, err, "unexpected connection drop")
+		t.Fatalf("errChan must not receive connection errors (would crash app), got: %v", err)
 	default:
-		t.Fatal("expected error on errChan for active context")
 	}
 }
 
