@@ -78,7 +78,9 @@ func (s *service) queryDevices(ctx context.Context, devices []model.DeviceListOb
 		s.deviceMu.Unlock()
 
 		if err := s.publisher.RegisterDevice(ctx, dev); err != nil {
-			s.sendIfErr(err)
+			if ctx.Err() == nil {
+				s.sendIfErr(err)
+			}
 		}
 
 		s.logger.Debug("polling device", zap.String("sn", dev.SerialNumber))
@@ -88,7 +90,9 @@ func (s *service) queryDevices(ctx context.Context, devices []model.DeviceListOb
 				return
 			}
 			if err := s.sendQueryRequest(qs, device.DeviceID); err != nil {
-				s.sendIfErr(err)
+				if ctx.Err() == nil {
+					s.sendIfErr(err)
+				}
 				return
 			}
 			if _, err := s.pending.wait(ctx); err != nil {
