@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -799,4 +800,99 @@ func TestSendIfErr_RoutesToEventsNeverErrChan(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("sendIfErr must deliver to events channel — got nothing")
 	}
+}
+
+// --- nil-conn / restart race regression tests ---
+
+// TestSendQueryRequest_NilConn_ReturnsError is the primary regression test for the
+// restart nil-pointer panic. Before the fix, sendQueryRequest called s.conn.Send()
+// without a nil check; a concurrent reconnect() that set s.conn=nil would panic.
+// After the fix it must return a descriptive error instead.
+func TestSendQueryRequest_NilConn_ReturnsError(t *testing.T) {
+	svc := newTestService()
+	// conn is intentionally left nil — simulates the window during reconnect.
+
+	err := svc.sendQueryRequest(model.Real, 1)
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "connection is nil")
+}
+
+// TestSendQueryRequest_ConcurrentReconnect_DoesNotPanic reproduces the exact race that
+// caused the production nil-pointer panic: one goroutine calls sendQueryRequest while
+// another toggles s.conn between nil and a live mock (simulating reconnect()).
+// Run with -race to confirm no data races remain.
+func TestSendQueryRequest_ConcurrentReconnect_DoesNotPanic(t *testing.T) {
+	svc := newTestService()
+
+	conn := socketsmocks.NewConnection(t)
+	conn.Mock.On("Send", mock.Anything).Return(nil).Maybe()
+	conn.Mock.On("Close").Return(nil).Maybe()
+
+	svc.connMu.Lock()
+	svc.conn = conn
+	svc.connMu.Unlock()
+
+	const iterations = 500
+	var wg sync.WaitGroup
+
+	// Goroutine 1: continuously send queries — must never panic.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			_ = svc.sendQueryRequest(model.Real, 1)
+		}
+	}()
+
+	// Goroutine 2: simulate reconnect toggling conn nil → non-nil under the lock.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			svc.connMu.Lock()
+			svc.conn = nil
+			svc.connMu.Unlock()
+			svc.connMu.Lock()
+			svc.conn = conn
+			svc.connMu.Unlock()
+		}
+	}()
+
+	assert.NotPanics(t, func() { wg.Wait() })
+}
+
+// TestOnMessage_LoginTimeout_NoInBandReconnect verifies the other half of the fix:
+// a "login timeout" message must NOT call reconnect() in-band. Previously the
+// in-band reconnect() set s.conn=nil while the poll-loop goroutine was actively
+// reading it, causing the panic. Now only the events channel signal is sent and
+// the existing connection must remain untouched until startWinetService calls
+// Connect() with the poll loop properly cancelled.
+func TestOnMessage_LoginTimeout_NoInBandReconnect(t *testing.T) {
+	svc := New(&config.WinetConfig{Host: "127.0.0.1"}, noopPublisher{})
+	svc.ctx = context.Background()
+	svc.properties = map[string]string{}
+	svc.loginReady = make(chan struct{})
+
+	conn := socketsmocks.NewConnection(t)
+	// Close must NOT be called — the in-band reconnect() would have called it.
+	// testify/mock's AssertExpectations (via t.Cleanup) will fail if Close is called.
+	svc.conn = conn
+
+	timeoutMsg := `{"result_code":1,"result_msg":"login timeout","result_Data":{"service":"connect"}}`
+	svc.onMessage([]byte(timeoutMsg), nil)
+
+	// The ErrTimeout event must still be signalled so startWinetService reconnects.
+	select {
+	case event := <-svc.Events():
+		assert.ErrorIs(t, event.Err, ErrTimeout)
+	case <-time.After(time.Second):
+		t.Fatal("expected ErrTimeout on Events() channel within 1s")
+	}
+
+	// conn must still be non-nil — reconnect() was not called in-band.
+	svc.connMu.RLock()
+	currentConn := svc.conn
+	svc.connMu.RUnlock()
+	assert.Same(t, conn, currentConn, "conn must not be replaced by an in-band reconnect")
 }
