@@ -32,10 +32,11 @@ func (s *service) runPollLoop(ctx context.Context) {
 	s.logger.Debug("poll loop started")
 
 	for {
-		if s.conn == nil {
+		conn := s.getConn()
+		if conn == nil {
 			return
 		}
-		s.sendDeviceListRequest(ctx, s.conn)
+		s.sendDeviceListRequest(ctx, conn)
 
 		v, err := s.pending.wait(ctx)
 		if err != nil {
@@ -86,7 +87,7 @@ func (s *service) queryDevices(ctx context.Context, devices []model.DeviceListOb
 		s.logger.Debug("polling device", zap.String("sn", dev.SerialNumber))
 
 		for _, qs := range model.DeviceStages[device.DevType] {
-			if s.conn == nil {
+			if s.getConn() == nil {
 				return
 			}
 			if err := s.sendQueryRequest(qs, device.DeviceID); err != nil {
@@ -118,6 +119,10 @@ func (s *service) sendQueryRequest(qs model.QueryStage, deviceID int) error {
 	if err != nil {
 		return err
 	}
+	conn := s.getConn()
+	if conn == nil {
+		return fmt.Errorf("connection is nil, cannot send query")
+	}
 	s.logger.Debug("sending query", zap.String("stage", qs.String()))
-	return s.conn.Send(ws.Msg{Body: data})
+	return conn.Send(ws.Msg{Body: data})
 }

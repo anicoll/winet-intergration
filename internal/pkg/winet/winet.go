@@ -71,6 +71,7 @@ func (p *pendingCmd) deliver(v any) {
 type service struct {
 	cfg        *config.WinetConfig
 	properties map[string]string
+	connMu     sync.RWMutex // protects conn
 	conn       ws.Connection
 	events     chan SessionEvent
 	token      string
@@ -104,6 +105,16 @@ func New(cfg *config.WinetConfig, pub publisher.DataPublisher) *service {
 		storedData: []byte{},
 		events:     make(chan SessionEvent, 1),
 	}
+}
+
+// getConn returns a snapshot of the current connection under a read lock.
+// All callers that need to use s.conn should go through this method so that
+// concurrent writes from reconnect() cannot produce a nil-pointer dereference.
+func (s *service) getConn() ws.Connection {
+	s.connMu.RLock()
+	c := s.conn
+	s.connMu.RUnlock()
+	return c
 }
 
 // Events returns the channel on which session lifecycle events are delivered.
@@ -179,13 +190,15 @@ func (s *service) onMessage(data []byte, c ws.Connection) {
 
 	s.logger.Debug("received message", zap.String("result", result.ResultMessage), zap.String("query_stage", result.ResultData.Service.String()))
 	if result.ResultMessage == "login timeout" {
-		s.logger.Debug("login timeout, reconnecting")
+		s.logger.Debug("login timeout, signalling reconnect")
+		// Signal the reconnect via the events channel only. startWinetService will
+		// call Connect(), which cancels the poll loop before calling reconnect().
+		// Calling reconnect() here directly raced with the poll-loop goroutine
+		// reading s.conn and was the root cause of the nil-pointer panic on restart.
 		select {
 		case s.events <- SessionEvent{Err: ErrTimeout}:
 		default:
 		}
-		err := s.reconnect(context.Background())
-		s.onError(err)
 		return
 	}
 
@@ -230,12 +243,16 @@ func (s *service) reconnect(ctx context.Context) error {
 	// Close the old connection before creating a new one. Without this, the old
 	// connection's readLoop and setupPing goroutines keep running and continue
 	// calling onMessage/onError on this service, racing with the new session.
+	// Hold the write lock so getConn() callers on the poll loop goroutine see a
+	// consistent nil (not a half-closed connection) during the transition.
+	s.connMu.Lock()
 	if s.conn != nil {
 		if err := s.conn.Close(); err != nil {
 			s.logger.Warn("error closing previous connection", zap.Error(err))
 		}
 		s.conn = nil
 	}
+	s.connMu.Unlock()
 
 	var u url.URL
 	if s.cfg.Ssl {
@@ -248,7 +265,7 @@ func (s *service) reconnect(ctx context.Context) error {
 
 	s.token = "" // clear it out just in case.
 
-	s.conn = ws.New(
+	newConn := ws.New(
 		ws.OnConnected(s.onconnect),
 		ws.OnMessage(s.onMessage),
 		ws.OnError(s.onError),
@@ -257,10 +274,18 @@ func (s *service) reconnect(ctx context.Context) error {
 		ws.WithPingMsg([]byte("ping")),
 	)
 
-	if err := s.conn.Dial(ctx, u.String(), ""); err != nil {
+	// Dial without holding the lock — I/O must not block readers.
+	// s.conn remains nil until the dial succeeds, so poll-loop callers that
+	// observe nil via getConn() will exit cleanly rather than panic.
+	if err := newConn.Dial(ctx, u.String(), ""); err != nil {
 		s.logger.Error("failed to connect to", zap.String("url", u.String()), zap.Error(err))
 		return err
 	}
+
+	s.connMu.Lock()
+	s.conn = newConn
+	s.connMu.Unlock()
+
 	s.logger.Debug("successfully connected to", zap.String("url", u.String()))
 	return nil
 }
