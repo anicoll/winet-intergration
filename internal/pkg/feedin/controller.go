@@ -108,7 +108,7 @@ func (c *Controller) Evaluate(prices []store.Amberprice) {
 		return
 	}
 
-	price, found := currentFeedinPrice(prices)
+	price, found := currentFeedinPrice(prices, now)
 	if !found {
 		c.logger.Debug("feedin: no current feed-in price found")
 		return
@@ -132,14 +132,14 @@ func (c *Controller) Evaluate(prices []store.Amberprice) {
 	}
 }
 
-// currentFeedinPrice returns the non-forecast feed-in Amber price covering right now.
-func currentFeedinPrice(prices []store.Amberprice) (store.Amberprice, bool) {
-	now := time.Now().UTC()
+// currentFeedinPrice returns the non-forecast feed-in Amber price covering the given moment.
+func currentFeedinPrice(prices []store.Amberprice, now time.Time) (store.Amberprice, bool) {
+	nowUTC := now.UTC()
 	for _, p := range prices {
 		if p.ChannelType != feedinChannel {
 			continue
 		}
-		if !p.Forecast && p.StartTime.UTC().Before(now) && p.EndTime.UTC().After(now) {
+		if !p.Forecast && p.StartTime.UTC().Before(nowUTC) && p.EndTime.UTC().After(nowUTC) {
 			return p, true
 		}
 	}
