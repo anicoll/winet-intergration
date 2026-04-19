@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	_ "time/tzdata"
 
 	"github.com/anicoll/winet-integration/cmd"
 	"github.com/anicoll/winet-integration/internal/pkg/config"
