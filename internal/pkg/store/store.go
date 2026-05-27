@@ -29,13 +29,6 @@ type Store interface {
 	// configured retention window.
 	Cleanup(ctx context.Context) error
 
-	// --- amber ---
-
-	GetAmberPrices(ctx context.Context, from, to time.Time, site *string) ([]Amberprice, error)
-	GetAmberUsage(ctx context.Context, from, to time.Time) ([]Amberusage, error)
-	WriteAmberPrices(ctx context.Context, prices []Amberprice) error
-	WriteAmberUsage(ctx context.Context, usage []Amberusage) error
-
 	// --- auth ---
 
 	GetUserByUsername(ctx context.Context, username string) (User, error)

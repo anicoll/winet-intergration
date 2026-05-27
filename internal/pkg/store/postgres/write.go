@@ -42,56 +42,7 @@ func (s *Store) RegisterDevice(ctx context.Context, device *model.Device) error 
 	})
 }
 
-func (s *Store) WriteAmberPrices(ctx context.Context, prices []store.Amberprice) error {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
 
-	qtx := s.queries.WithTx(tx)
-	for _, p := range prices {
-		if err := qtx.UpsertAmberPrice(ctx, dbq.UpsertAmberPriceParams{
-			PerKwh:      p.PerKwh,
-			SpotPerKwh:  p.SpotPerKwh,
-			StartTime:   p.StartTime,
-			EndTime:     p.EndTime,
-			Duration:    p.Duration,
-			Forecast:    p.Forecast,
-			ChannelType: p.ChannelType,
-		}); err != nil {
-			return err
-		}
-	}
-	return tx.Commit(ctx)
-}
-
-func (s *Store) WriteAmberUsage(ctx context.Context, usage []store.Amberusage) error {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	qtx := s.queries.WithTx(tx)
-	for _, u := range usage {
-		if err := qtx.UpsertAmberUsage(ctx, dbq.UpsertAmberUsageParams{
-			PerKwh:            u.PerKwh,
-			SpotPerKwh:        u.SpotPerKwh,
-			StartTime:         u.StartTime,
-			EndTime:           u.EndTime,
-			Duration:          u.Duration,
-			ChannelType:       u.ChannelType,
-			ChannelIdentifier: u.ChannelIdentifier,
-			Kwh:               u.Kwh,
-			Quality:           u.Quality,
-			Cost:              u.Cost,
-		}); err != nil {
-			return err
-		}
-	}
-	return tx.Commit(ctx)
-}
 
 func (s *Store) CreateUser(ctx context.Context, username, passwordHash string) (store.User, error) {
 	u, err := s.queries.CreateUser(ctx, dbq.CreateUserParams{

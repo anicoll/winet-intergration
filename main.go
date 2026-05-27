@@ -10,7 +10,6 @@ import (
 )
 
 //go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.6.0 --config=./gen/config.yaml ./gen/api.yaml
-//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.6.0 --config=./gen/amber/config.yaml ./gen/amber/api.json
 
 func main() {
 	cfg, err := config.Load()

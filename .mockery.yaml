@@ -8,8 +8,6 @@ packages:
     config:
       dir: "mocks/cmd"
     interfaces:
-      AmberUsageFetcher:
-      AmberUsageWriter:
       WinetConnector:
   github.com/anicoll/winet-integration/pkg/sockets:
     config:
@@ -21,12 +19,7 @@ packages:
       dir: "mocks/publisher"
     interfaces:
       DataPublisher:
-  github.com/anicoll/winet-integration/internal/pkg/logic:
-    config:
-      dir: "mocks/logic"
-    interfaces:
-      WinetCommands:
-      Database:
+
   github.com/anicoll/winet-integration/internal/pkg/server:
     config:
       dir: "mocks/server"

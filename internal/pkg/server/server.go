@@ -32,8 +32,6 @@ type WinetService interface {
 type Database interface {
 	GetLatestProperties(ctx context.Context) (iter.Seq[store.Property], error)
 	GetProperties(ctx context.Context, identifier, slug string, from, to *time.Time) ([]store.Property, error)
-	GetAmberPrices(ctx context.Context, from, to time.Time, site *string) ([]store.Amberprice, error)
-	GetAmberUsage(ctx context.Context, from, to time.Time) ([]store.Amberusage, error)
 }
 
 type server struct {
@@ -83,66 +81,7 @@ func unmarshalPayload[T any](r *http.Request) (*T, error) {
 	return &out, nil
 }
 
-func (s *server) GetAmberUsageFromTo(w http.ResponseWriter, r *http.Request, from time.Time, to time.Time, params api.GetAmberUsageFromToParams) {
-	ctx := r.Context()
-	usage, err := s.db.GetAmberUsage(ctx, from.In(s.loc), to.In(s.loc))
-	if err != nil {
-		handleError(w, err)
-		return
-	}
-	res := []api.AmberUsage{}
-	for _, u := range usage {
-		res = append(res, api.AmberUsage{
-			Id:                u.ID,
-			PerKwh:            float32(u.PerKwh),
-			SpotPerKwh:        float32(u.SpotPerKwh),
-			StartTime:         u.StartTime,
-			EndTime:           u.EndTime,
-			Duration:          u.Duration,
-			ChannelType:       u.ChannelType,
-			ChannelIdentifier: u.ChannelIdentifier,
-			Kwh:               float32(u.Kwh),
-			Quality:           api.AmberUsageQuality(u.Quality),
-			Cost:              float32(u.Cost),
-			CreatedAt:         u.CreatedAt,
-			UpdatedAt:         u.UpdatedAt,
-		})
-	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(res); err != nil {
-		handleError(w, err)
-		return
-	}
-}
 
-func (s *server) GetAmberPricesFromTo(w http.ResponseWriter, r *http.Request, from time.Time, to time.Time, params api.GetAmberPricesFromToParams) {
-	ctx := r.Context()
-	amberPrices, err := s.db.GetAmberPrices(ctx, from.In(s.loc), to.In(s.loc), params.Site)
-	if err != nil {
-		handleError(w, err)
-		return
-	}
-	res := []api.AmberPrice{}
-	for _, price := range amberPrices {
-		res = append(res, api.AmberPrice{
-			PerKwh:      float32(price.PerKwh),
-			SpotPerKwh:  float32(price.SpotPerKwh),
-			StartTime:   price.StartTime,
-			EndTime:     price.EndTime,
-			Duration:    price.Duration,
-			Forecast:    price.Forecast,
-			ChannelType: price.ChannelType,
-			CreatedAt:   price.CreatedAt,
-			UpdatedAt:   price.UpdatedAt,
-			Id:          price.ID,
-		})
-	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(res); err != nil {
-		handleError(w, err)
-		return
-	}
-}
 
 func (s *server) PostBatteryState(w http.ResponseWriter, r *http.Request, state string) {
 	changeStateReq, err := unmarshalPayload[api.ChangeBatteryStatePayload](r)

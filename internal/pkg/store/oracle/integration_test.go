@@ -131,57 +131,6 @@ func (s *OracleSuite) TestRegisterDevice() {
 	s.Require().NoError(s.store.RegisterDevice(ctx, dev), "second upsert must be idempotent")
 }
 
-func (s *OracleSuite) TestWriteAmberPrices_and_GetAmberPrices() {
-	ctx := context.Background()
-
-	now := time.Now().UTC().Truncate(time.Second)
-	prices := []store.Amberprice{
-		{
-			PerKwh:      12.5,
-			SpotPerKwh:  10.0,
-			StartTime:   now,
-			EndTime:     now.Add(30 * time.Minute),
-			Duration:    30,
-			Forecast:    false,
-			ChannelType: "general",
-		},
-	}
-
-	s.Require().NoError(s.store.WriteAmberPrices(ctx, prices))
-
-	got, err := s.store.GetAmberPrices(ctx, now.Add(-time.Minute), now.Add(time.Hour), nil)
-	s.Require().NoError(err)
-	s.Require().NotEmpty(got)
-	s.Equal(prices[0].PerKwh, got[0].PerKwh)
-}
-
-func (s *OracleSuite) TestWriteAmberUsage_and_GetAmberUsage() {
-	ctx := context.Background()
-
-	now := time.Now().UTC().Truncate(time.Second)
-	usage := []store.Amberusage{
-		{
-			PerKwh:            12.5,
-			SpotPerKwh:        10.0,
-			StartTime:         now,
-			EndTime:           now.Add(30 * time.Minute),
-			Duration:          30,
-			ChannelType:       "general",
-			ChannelIdentifier: "E1",
-			Kwh:               1.5,
-			Quality:           "actual",
-			Cost:              0.20,
-		},
-	}
-
-	s.Require().NoError(s.store.WriteAmberUsage(ctx, usage))
-
-	got, err := s.store.GetAmberUsage(ctx, now.Add(-time.Minute), now.Add(time.Hour))
-	s.Require().NoError(err)
-	s.Require().NotEmpty(got)
-	s.InDelta(usage[0].Kwh, got[0].Kwh, 0.001)
-}
-
 func (s *OracleSuite) TestUserAndRefreshToken() {
 	ctx := context.Background()
 

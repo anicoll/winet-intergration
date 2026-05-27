@@ -65,62 +65,7 @@ func scanProperties(rows *sql.Rows) ([]store.Property, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) GetAmberPrices(ctx context.Context, from, to time.Time, _ *string) ([]store.Amberprice, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, per_kwh, spot_per_kwh, start_time, end_time, duration, forecast,
-		       channel_type, created_at, updated_at
-		FROM AmberPrice
-		WHERE start_time BETWEEN :1 AND :2
-		ORDER BY start_time DESC`,
-		from, to)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
 
-	var out []store.Amberprice
-	for rows.Next() {
-		var p store.Amberprice
-		var forecast int
-		if err := rows.Scan(
-			&p.ID, &p.PerKwh, &p.SpotPerKwh, &p.StartTime, &p.EndTime,
-			&p.Duration, &forecast, &p.ChannelType, &p.CreatedAt, &p.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		p.Forecast = forecast != 0
-		out = append(out, p)
-	}
-	return out, rows.Err()
-}
-
-func (s *Store) GetAmberUsage(ctx context.Context, from, to time.Time) ([]store.Amberusage, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, per_kwh, spot_per_kwh, start_time, end_time, duration,
-		       channel_type, channel_identifier, kwh, quality, cost, created_at, updated_at
-		FROM AmberUsage
-		WHERE start_time BETWEEN :1 AND :2
-		ORDER BY start_time DESC`,
-		from, to)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var out []store.Amberusage
-	for rows.Next() {
-		var u store.Amberusage
-		if err := rows.Scan(
-			&u.ID, &u.PerKwh, &u.SpotPerKwh, &u.StartTime, &u.EndTime,
-			&u.Duration, &u.ChannelType, &u.ChannelIdentifier, &u.Kwh, &u.Quality, &u.Cost,
-			&u.CreatedAt, &u.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		out = append(out, u)
-	}
-	return out, rows.Err()
-}
 
 func (s *Store) GetUserByUsername(ctx context.Context, username string) (store.User, error) {
 	row := s.db.QueryRowContext(ctx, `
