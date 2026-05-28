@@ -37,8 +37,6 @@ func (s *Store) GetLatestProperties(ctx context.Context) (iter.Seq[store.Propert
 	return slices.Values(toProperties(rows)), nil
 }
 
-
-
 func (s *Store) GetUserByUsername(ctx context.Context, username string) (store.User, error) {
 	u, err := s.queries.GetUserByUsername(ctx, username)
 	if err != nil {

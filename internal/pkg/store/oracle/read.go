@@ -65,8 +65,6 @@ func scanProperties(rows *sql.Rows) ([]store.Property, error) {
 	return out, rows.Err()
 }
 
-
-
 func (s *Store) GetUserByUsername(ctx context.Context, username string) (store.User, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, username, password_hash, created_at, updated_at

@@ -81,8 +81,6 @@ func unmarshalPayload[T any](r *http.Request) (*T, error) {
 	return &out, nil
 }
 
-
-
 func (s *server) PostBatteryState(w http.ResponseWriter, r *http.Request, state string) {
 	changeStateReq, err := unmarshalPayload[api.ChangeBatteryStatePayload](r)
 	if err != nil {

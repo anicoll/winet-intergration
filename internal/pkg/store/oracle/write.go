@@ -53,8 +53,6 @@ func (s *Store) RegisterDevice(ctx context.Context, device *model.Device) error 
 	return err
 }
 
-
-
 func (s *Store) CreateUser(ctx context.Context, username, passwordHash string) (store.User, error) {
 	now := time.Now()
 	_, err := s.db.ExecContext(ctx, `

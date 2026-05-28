@@ -36,8 +36,6 @@ import (
 
 var errCron = errors.New("cron error")
 
-
-
 const (
 	// Server configuration
 	serverAddr         = "0.0.0.0:8000"
@@ -48,7 +46,7 @@ const (
 	errorChannelBuffer = 1000
 
 	// Cron schedules
-	dbCleanupSchedule   = "CRON_TZ=Australia/Adelaide 0 3 * * *"
+	// dbCleanupSchedule = "CRON_TZ=Australia/Adelaide 0 3 * * *"
 
 	// Reconnect backoff
 	backoffBase     = 5 * time.Second
@@ -121,8 +119,6 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		return fmt.Errorf("failed to load timezone: %w", err)
 	}
 
-
-
 	health := &healthState{}
 	health.set("starting")
 
@@ -132,8 +128,6 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	// eg.Go(func() error {
 	// 	return startDbCleanupService(ctx, db, errorChan, logger)
 	// })
-
-
 
 	// Start winet service with retry logic
 	eg.Go(func() error {
@@ -223,8 +217,6 @@ func setupDatabase(ctx context.Context, driver, dsn, migrationsPath string, orac
 		return pgstore.New(pool), pool.Close, nil
 	}
 }
-
-
 
 type WinetConnector interface {
 	Connect(ctx context.Context) error

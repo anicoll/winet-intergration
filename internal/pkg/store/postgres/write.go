@@ -42,8 +42,6 @@ func (s *Store) RegisterDevice(ctx context.Context, device *model.Device) error 
 	})
 }
 
-
-
 func (s *Store) CreateUser(ctx context.Context, username, passwordHash string) (store.User, error) {
 	u, err := s.queries.CreateUser(ctx, dbq.CreateUserParams{
 		Username:     username,

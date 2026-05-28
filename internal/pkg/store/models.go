@@ -16,8 +16,6 @@ type Property struct {
 	Slug              string    `json:"slug"`
 }
 
-
-
 // User is an application user account.
 type User struct {
 	ID           int       `json:"id"`
