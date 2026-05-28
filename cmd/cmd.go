@@ -17,17 +17,13 @@ import (
 
 	paho_mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/jackc/pgx/v5/pgxpool"
-	openapi_types "github.com/oapi-codegen/runtime/types"
-	"github.com/robfig/cron/v3"
 	go_ora "github.com/sijms/go-ora/v2"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/anicoll/winet-integration/internal/pkg/amber"
 	"github.com/anicoll/winet-integration/internal/pkg/auth"
 	"github.com/anicoll/winet-integration/internal/pkg/config"
 	"github.com/anicoll/winet-integration/internal/pkg/database/migration"
-	"github.com/anicoll/winet-integration/internal/pkg/feedin"
 	"github.com/anicoll/winet-integration/internal/pkg/mqtt"
 	"github.com/anicoll/winet-integration/internal/pkg/publisher"
 	"github.com/anicoll/winet-integration/internal/pkg/server"
@@ -40,14 +36,6 @@ import (
 
 var errCron = errors.New("cron error")
 
-type AmberUsageFetcher interface {
-	GetUsage(ctx context.Context, siteID string, startDate, endDate openapi_types.Date) ([]store.Amberusage, error)
-}
-
-type AmberUsageWriter interface {
-	WriteAmberUsage(ctx context.Context, usage []store.Amberusage) error
-}
-
 const (
 	// Server configuration
 	serverAddr         = "0.0.0.0:8000"
@@ -58,12 +46,7 @@ const (
 	errorChannelBuffer = 1000
 
 	// Cron schedules
-	dbCleanupSchedule   = "CRON_TZ=Australia/Adelaide 0 3 * * *"
-	priceUpdateSchedule = "CRON_TZ=Australia/Adelaide */5 * * * *"
-	usageUpdateSchedule = "CRON_TZ=Australia/Adelaide 0 8 * * *"
-
-	// Delays
-	priceUpdateDelay = 5 * time.Second
+	// dbCleanupSchedule = "CRON_TZ=Australia/Adelaide 0 3 * * *"
 
 	// Reconnect backoff
 	backoffBase     = 5 * time.Second
@@ -132,13 +115,9 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	errorChan := make(chan error, errorChannelBuffer)
 	winetSvc := winet.New(&cfg.WinetCfg, pub)
 
-	loc, err := time.LoadLocation(cfg.Timezone)
-	if err != nil {
+	if _, err := time.LoadLocation(cfg.Timezone); err != nil {
 		return fmt.Errorf("failed to load timezone: %w", err)
 	}
-
-	feedinCtrl := feedin.New(winetSvc, loc)
-	winetSvc.SetDeviceStatusHook(feedinCtrl.UpdateFromStatuses)
 
 	health := &healthState{}
 	health.set("starting")
@@ -149,16 +128,6 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	// eg.Go(func() error {
 	// 	return startDbCleanupService(ctx, db, errorChan, logger)
 	// })
-
-	// Start amber price processing service
-	eg.Go(func() error {
-		return startAmberPriceService(ctx, &cfg.AmberCfg, db, errorChan, logger, feedinCtrl.Evaluate)
-	})
-
-	// Start amber usage processing service
-	eg.Go(func() error {
-		return startAmberUsageService(ctx, &cfg.AmberCfg, db, errorChan, logger)
-	})
 
 	// Start winet service with retry logic
 	eg.Go(func() error {
@@ -247,140 +216,6 @@ func setupDatabase(ctx context.Context, driver, dsn, migrationsPath string, orac
 		}
 		return pgstore.New(pool), pool.Close, nil
 	}
-}
-
-func startAmberPriceService(ctx context.Context, amberCfg *config.AmberConfig, db store.Store, errChan chan error, logger *zap.Logger, onPriceUpdate func([]store.Amberprice)) error {
-	logger.Info("Starting amber price service")
-
-	if amberCfg == nil || amberCfg.Host == "" || amberCfg.Token == "" {
-		return errors.New("amber host and token are required")
-	}
-
-	svc, err := amber.New(ctx, amberCfg.Host, amberCfg.Token)
-	if err != nil {
-		return fmt.Errorf("failed to create amber service: %w", err)
-	}
-
-	sites := svc.GetSites()
-	if len(sites) == 0 {
-		return errors.New("no amber sites available")
-	}
-	site := sites[0]
-
-	// Initial price fetch
-	if _, err := fetchAndStorePrices(ctx, svc, db, site.Id); err != nil {
-		return fmt.Errorf("initial price fetch failed: %w", err)
-	}
-
-	// Setup cron job
-	c := cron.New()
-	if _, err := c.AddFunc(priceUpdateSchedule, func() {
-		time.Sleep(priceUpdateDelay) // ensure we get the latest prices
-		prices, err := fetchAndStorePrices(context.Background(), svc, db, site.Id)
-		if err != nil {
-			logger.Error("amber price update failed", zap.Error(err))
-			select {
-			case errChan <- fmt.Errorf("%w: %v", errCron, err):
-			default:
-				logger.Warn("error channel full, dropping error")
-			}
-			return
-		}
-		logger.Info("amber prices updated")
-		if onPriceUpdate != nil {
-			onPriceUpdate(prices)
-		}
-	}); err != nil {
-		return fmt.Errorf("failed to schedule amber price updates: %w", err)
-	}
-
-	c.Start()
-
-	// Wait for context cancellation
-	<-ctx.Done()
-	c.Stop()
-	logger.Info("Amber price service stopped")
-	return ctx.Err()
-}
-
-func startAmberUsageService(ctx context.Context, amberCfg *config.AmberConfig, db store.Store, errChan chan error, logger *zap.Logger) error {
-	logger.Info("Starting amber usage service")
-
-	if amberCfg == nil || amberCfg.Host == "" || amberCfg.Token == "" {
-		return errors.New("amber host and token are required")
-	}
-
-	svc, err := amber.New(ctx, amberCfg.Host, amberCfg.Token)
-	if err != nil {
-		return fmt.Errorf("failed to create amber service: %w", err)
-	}
-
-	sites := svc.GetSites()
-	if len(sites) == 0 {
-		return errors.New("no amber sites available")
-	}
-	site := sites[0]
-
-	// Initial usage fetch
-	if err := fetchAndStoreUsage(ctx, svc, db, site.Id); err != nil {
-		logger.Warn("initial usage fetch failed", zap.Error(err))
-	}
-
-	c := cron.New()
-	if _, err := c.AddFunc(usageUpdateSchedule, func() {
-		if err := fetchAndStoreUsage(context.Background(), svc, db, site.Id); err != nil {
-			logger.Error("amber usage update failed", zap.Error(err))
-			select {
-			case errChan <- fmt.Errorf("%w: %v", errCron, err):
-			default:
-				logger.Warn("error channel full, dropping error")
-			}
-			return
-		}
-		logger.Info("amber usage updated")
-	}); err != nil {
-		return fmt.Errorf("failed to schedule amber usage updates: %w", err)
-	}
-
-	c.Start()
-
-	<-ctx.Done()
-	c.Stop()
-	logger.Info("Amber usage service stopped")
-	return ctx.Err()
-}
-
-func fetchAndStoreUsage(ctx context.Context, svc AmberUsageFetcher, db AmberUsageWriter, siteId string) error {
-	now := time.Now()
-	startDate := openapi_types.Date{Time: now.AddDate(0, 0, -7)}
-	endDate := openapi_types.Date{Time: now.AddDate(0, 0, -1)}
-
-	usage, err := svc.GetUsage(ctx, siteId, startDate, endDate)
-	if err != nil {
-		return fmt.Errorf("failed to get usage: %w", err)
-	}
-
-	if err := db.WriteAmberUsage(ctx, usage); err != nil {
-		return fmt.Errorf("failed to write usage to database: %w", err)
-	}
-
-	return nil
-}
-
-func fetchAndStorePrices(ctx context.Context, svc interface {
-	GetPrices(ctx context.Context, siteID string) ([]store.Amberprice, error)
-}, db store.Store, siteId string,
-) ([]store.Amberprice, error) {
-	prices, err := svc.GetPrices(ctx, siteId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get prices: %w", err)
-	}
-
-	if err := db.WriteAmberPrices(ctx, prices); err != nil {
-		return nil, fmt.Errorf("failed to write prices to database: %w", err)
-	}
-
-	return prices, nil
 }
 
 type WinetConnector interface {

@@ -37,61 +37,6 @@ func (s *Store) GetLatestProperties(ctx context.Context) (iter.Seq[store.Propert
 	return slices.Values(toProperties(rows)), nil
 }
 
-func (s *Store) GetAmberUsage(ctx context.Context, from, to time.Time) ([]store.Amberusage, error) {
-	rows, err := s.queries.GetAmberUsage(ctx, dbq.GetAmberUsageParams{
-		StartTime:   from,
-		StartTime_2: to,
-	})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]store.Amberusage, len(rows))
-	for i, r := range rows {
-		out[i] = store.Amberusage{
-			ID:                r.ID,
-			PerKwh:            r.PerKwh,
-			SpotPerKwh:        r.SpotPerKwh,
-			StartTime:         r.StartTime,
-			EndTime:           r.EndTime,
-			Duration:          r.Duration,
-			ChannelType:       r.ChannelType,
-			ChannelIdentifier: r.ChannelIdentifier,
-			Kwh:               r.Kwh,
-			Quality:           r.Quality,
-			Cost:              r.Cost,
-			CreatedAt:         r.CreatedAt.Time,
-			UpdatedAt:         r.UpdatedAt.Time,
-		}
-	}
-	return out, nil
-}
-
-func (s *Store) GetAmberPrices(ctx context.Context, from, to time.Time, _ *string) ([]store.Amberprice, error) {
-	rows, err := s.queries.GetAmberPrices(ctx, dbq.GetAmberPricesParams{
-		StartTime:   from,
-		StartTime_2: to,
-	})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]store.Amberprice, len(rows))
-	for i, r := range rows {
-		out[i] = store.Amberprice{
-			ID:          r.ID,
-			PerKwh:      r.PerKwh,
-			SpotPerKwh:  r.SpotPerKwh,
-			StartTime:   r.StartTime,
-			EndTime:     r.EndTime,
-			Duration:    r.Duration,
-			Forecast:    r.Forecast,
-			ChannelType: r.ChannelType,
-			CreatedAt:   r.CreatedAt.Time,
-			UpdatedAt:   r.UpdatedAt.Time,
-		}
-	}
-	return out, nil
-}
-
 func (s *Store) GetUserByUsername(ctx context.Context, username string) (store.User, error) {
 	u, err := s.queries.GetUserByUsername(ctx, username)
 	if err != nil {

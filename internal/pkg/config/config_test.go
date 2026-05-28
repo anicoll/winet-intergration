@@ -100,8 +100,6 @@ func TestLoad_CustomValues(t *testing.T) {
 	t.Setenv("MQTT_HOST", "mqtt://broker:1883")
 	t.Setenv("MQTT_USERNAME", "mqttuser")
 	t.Setenv("MQTT_PASSWORD", "mqttpass")
-	t.Setenv("AMBER_HOST", "https://api.amber.com")
-	t.Setenv("AMBER_TOKEN", "tok123")
 	t.Setenv("MIGRATIONS_FOLDER", "/custom/migrations")
 
 	cfg, err := Load()
@@ -114,7 +112,5 @@ func TestLoad_CustomValues(t *testing.T) {
 	assert.Equal(t, "mqtt://broker:1883", cfg.MqttCfg.Host)
 	assert.Equal(t, "mqttuser", cfg.MqttCfg.Username)
 	assert.Equal(t, "mqttpass", cfg.MqttCfg.Password)
-	assert.Equal(t, "https://api.amber.com", cfg.AmberCfg.Host)
-	assert.Equal(t, "tok123", cfg.AmberCfg.Token)
 	assert.Equal(t, "/custom/migrations", cfg.MigrationsFolder)
 }

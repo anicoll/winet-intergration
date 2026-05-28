@@ -16,37 +16,6 @@ type Property struct {
 	Slug              string    `json:"slug"`
 }
 
-// Amberprice is a single electricity price interval from the Amber API.
-type Amberprice struct {
-	ID          int       `json:"id"`
-	PerKwh      float64   `json:"per_kwh"`
-	SpotPerKwh  float64   `json:"spot_per_kwh"`
-	StartTime   time.Time `json:"start_time"`
-	EndTime     time.Time `json:"end_time"`
-	Duration    int       `json:"duration"`
-	Forecast    bool      `json:"forecast"`
-	ChannelType string    `json:"channel_type"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-}
-
-// Amberusage is a single energy usage interval from the Amber API.
-type Amberusage struct {
-	ID                int       `json:"id"`
-	PerKwh            float64   `json:"per_kwh"`
-	SpotPerKwh        float64   `json:"spot_per_kwh"`
-	StartTime         time.Time `json:"start_time"`
-	EndTime           time.Time `json:"end_time"`
-	Duration          int       `json:"duration"`
-	ChannelType       string    `json:"channel_type"`
-	ChannelIdentifier string    `json:"channel_identifier"`
-	Kwh               float64   `json:"kwh"`
-	Quality           string    `json:"quality"`
-	Cost              float64   `json:"cost"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
-}
-
 // User is an application user account.
 type User struct {
 	ID           int       `json:"id"`

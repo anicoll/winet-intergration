@@ -20,24 +20,6 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
-// Defines values for AmberUsageQuality.
-const (
-	Billable  AmberUsageQuality = "billable"
-	Estimated AmberUsageQuality = "estimated"
-)
-
-// Valid indicates whether the value is a known member of the AmberUsageQuality enum.
-func (e AmberUsageQuality) Valid() bool {
-	switch e {
-	case Billable:
-		return true
-	case Estimated:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for ChangeBatteryStatePayloadState.
 const (
 	Charge          ChangeBatteryStatePayloadState = "charge"
@@ -79,51 +61,6 @@ func (e ChangeInverterStatePayloadState) Valid() bool {
 		return false
 	}
 }
-
-// AmberPrice defines model for AmberPrice.
-type AmberPrice struct {
-	// ChannelType indicates if the price is feedin or general.
-	ChannelType string    `json:"channelType"`
-	CreatedAt   time.Time `json:"createdAt"`
-
-	// Duration duration in minutes
-	Duration int       `json:"duration"`
-	EndTime  time.Time `json:"endTime"`
-
-	// Forecast indicates if the price is a forecast price or not.
-	Forecast   bool      `json:"forecast"`
-	Id         int       `json:"id"`
-	PerKwh     float32   `json:"perKwh"`
-	SpotPerKwh float32   `json:"spotPerKwh"`
-	StartTime  time.Time `json:"startTime"`
-	UpdatedAt  time.Time `json:"updatedAt"`
-}
-
-// AmberUsage defines model for AmberUsage.
-type AmberUsage struct {
-	ChannelIdentifier string `json:"channelIdentifier"`
-	ChannelType       string `json:"channelType"`
-
-	// Cost total cost including GST
-	Cost      float32   `json:"cost"`
-	CreatedAt time.Time `json:"createdAt"`
-
-	// Duration duration in minutes
-	Duration int       `json:"duration"`
-	EndTime  time.Time `json:"endTime"`
-	Id       int       `json:"id"`
-
-	// Kwh kWh consumed or generated (negative for generation)
-	Kwh        float32           `json:"kwh"`
-	PerKwh     float32           `json:"perKwh"`
-	Quality    AmberUsageQuality `json:"quality"`
-	SpotPerKwh float32           `json:"spotPerKwh"`
-	StartTime  time.Time         `json:"startTime"`
-	UpdatedAt  time.Time         `json:"updatedAt"`
-}
-
-// AmberUsageQuality defines model for AmberUsage.Quality.
-type AmberUsageQuality string
 
 // ChangeBatteryStatePayload defines model for ChangeBatteryStatePayload.
 type ChangeBatteryStatePayload struct {
@@ -171,16 +108,6 @@ type Property struct {
 	Value             *string    `json:"value,omitempty"`
 }
 
-// GetAmberPricesFromToParams defines parameters for GetAmberPricesFromTo.
-type GetAmberPricesFromToParams struct {
-	Site *string `form:"site,omitempty" json:"site,omitempty"`
-}
-
-// GetAmberUsageFromToParams defines parameters for GetAmberUsageFromTo.
-type GetAmberUsageFromToParams struct {
-	Site *string `form:"site,omitempty" json:"site,omitempty"`
-}
-
 // GetPropertyIdentifierSlugParams defines parameters for GetPropertyIdentifierSlug.
 type GetPropertyIdentifierSlugParams struct {
 	From *time.Time `form:"from,omitempty" json:"from,omitempty"`
@@ -201,12 +128,6 @@ type PostInverterStateJSONRequestBody = ChangeInverterStatePayload
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-
-	// (GET /amber/prices/{from}/{to})
-	GetAmberPricesFromTo(w http.ResponseWriter, r *http.Request, from time.Time, to time.Time, params GetAmberPricesFromToParams)
-
-	// (GET /amber/usage/{from}/{to})
-	GetAmberUsageFromTo(w http.ResponseWriter, r *http.Request, from time.Time, to time.Time, params GetAmberUsageFromToParams)
 	// Login
 	// (POST /auth/login)
 	PostAuthLogin(w http.ResponseWriter, r *http.Request)
@@ -241,96 +162,6 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
-
-// GetAmberPricesFromTo operation middleware
-func (siw *ServerInterfaceWrapper) GetAmberPricesFromTo(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "from" -------------
-	var from time.Time
-
-	err = runtime.BindStyledParameterWithOptions("simple", "from", r.PathValue("from"), &from, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "date-time"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "to" -------------
-	var to time.Time
-
-	err = runtime.BindStyledParameterWithOptions("simple", "to", r.PathValue("to"), &to, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "date-time"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetAmberPricesFromToParams
-
-	// ------------- Optional query parameter "site" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "site", r.URL.Query(), &params.Site, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "site", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetAmberPricesFromTo(w, r, from, to, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetAmberUsageFromTo operation middleware
-func (siw *ServerInterfaceWrapper) GetAmberUsageFromTo(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "from" -------------
-	var from time.Time
-
-	err = runtime.BindStyledParameterWithOptions("simple", "from", r.PathValue("from"), &from, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "date-time"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "to" -------------
-	var to time.Time
-
-	err = runtime.BindStyledParameterWithOptions("simple", "to", r.PathValue("to"), &to, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "date-time"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetAmberUsageFromToParams
-
-	// ------------- Optional query parameter "site" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "site", r.URL.Query(), &params.Site, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "site", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetAmberUsageFromTo(w, r, from, to, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
 
 // PostAuthLogin operation middleware
 func (siw *ServerInterfaceWrapper) PostAuthLogin(w http.ResponseWriter, r *http.Request) {
@@ -625,8 +456,6 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	m.HandleFunc("GET "+options.BaseURL+"/amber/prices/{from}/{to}", wrapper.GetAmberPricesFromTo)
-	m.HandleFunc("GET "+options.BaseURL+"/amber/usage/{from}/{to}", wrapper.GetAmberUsageFromTo)
 	m.HandleFunc("POST "+options.BaseURL+"/auth/login", wrapper.PostAuthLogin)
 	m.HandleFunc("POST "+options.BaseURL+"/auth/logout", wrapper.PostAuthLogout)
 	m.HandleFunc("POST "+options.BaseURL+"/auth/refresh", wrapper.PostAuthRefresh)
@@ -642,31 +471,23 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"//8PH7Kr4BwAAA==",
+	"H4sIAAAAAAAC/9RWTW/bRhD9K4tpj7RFOYEPvCVFmxoIWsMqEKCBIazIIbUxubuenZVDCPrvxS5libQo",
+	"f6AxktwIcj7fzBu+NeSmsUajZgfZGly+xEbGx9+WUlf4XjIjtTOWjJeyrY0swkdLxiKxwmhqzR1SeMCv",
+	"srE1QnZ+ep4AtxYhA8ekdAWbBFyIEu20byD7DA7rcp4b7XxjWRkNCeRLSRVCAoVyu2fHxsJ1so8/5qk0",
+	"ZGAlL+Eg9SYBwluvCIuYNtZxvTMziy+Yc6iwa/oPxELpo+0WyslFjYOGmTzu4i2MqVHqg7z3jsczX+gV",
+	"EiM9jvcBjrF/U5ZDjL4ZKr83ltuQ7+DLR1MpfYW3Hh2P7IV07s5QMUAKnLdIDnNChpEl8Q5Jy2YIL8ha",
+	"5fhkCzvfZJ97rKFt2c4a7fCwbpnn6NyczQ3qXttHkg6sx7JddsHbw0RqCM1056w0Y4UUvFWBmlWpHjAM",
+	"Zn+ep1ez+bvpGIiu9tXQfCHzG2/nZagcdd6OebFq0LFs7ND1LD17czJNT9LpP9OzLE2zNP0XEigNNZIh",
+	"g0IyngTf0XFqxXNTzhuUzhM2qHkY/ebTcsxvJWv/YAemafrkBhynWLBUujRxoIpjxE9KI5/MxAxphQQJ",
+	"rJBcuCYZTE/T0zQUYixqaRVk8Ca+SiKb4vgm0vNyUodl6s5gR4IwYRmO0kUBGVwax+88L+POQVctOn5v",
+	"irgQudG8xURaW6s8ek6+OKP3Bzk8/UpYQga/TPYXe7I915MBDTdDTMJlii+6bY+Fn6Xpt8695VJMXqDL",
+	"SXV3OevIJpyPNCl9HUB9m07jJR0YXuiVrFUhcsK487J2cb7ON42k9j5UfLeD3nh+FvbB7gCFt4dFfDRV",
+	"hYUI5ge5jWchdSEIV+YGBWFJ6JaiY/6+qu37p8u62hp+z+n8hXeiu2D3fRyZzlW/W6G2szIk8KuNmzaE",
+	"6968H1t4p3Qllsz2b123IjfmRmGH3KITGpN1/A1tHgevr0oiIUk2yEgOss/rwS+v+5Ns/20PaZH0QHx4",
+	"Vq5fh6nHVdXIbDpjEc3Ezu4Vt6X70Y9UkneVRBgF9dYpjE5tRcukjLrp8dHdK5xOY8FrojyUccfxDXYi",
+	"nChkVrpyPzLEz6LHQEX+jPwYlcE/L0GGoq/CkbF9QL7cW/3PDhRj455qZadKNzupJInkaHf7Bvq99c/9",
+	"B2TRa7PfdjtZ7zXsZrIO2nTzDCDai53XLMjZ5+xxTyy/ZJmTcVJ0WV8e5tYjtfs4JZkG+n7PUc7HgrF5",
+	"eajrH22fCNmTdsJZzFWp8t7qiEUrSlUz0mmkz2bzXwAAAP//4G4XyaQQAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

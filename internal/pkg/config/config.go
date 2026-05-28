@@ -10,7 +10,6 @@ import (
 type Config struct {
 	WinetCfg         WinetConfig
 	MqttCfg          MQTTConfig
-	AmberCfg         AmberConfig
 	AuthCfg          AuthConfig
 	OracleCfg        OracleConfig
 	LogLevel         string   `env:"LOG_LEVEL"          envDefault:"info"`
@@ -43,11 +42,6 @@ type MQTTConfig struct {
 	Host     string `env:"MQTT_HOST"`
 	Username string `env:"MQTT_USERNAME"`
 	Password string `env:"MQTT_PASSWORD"`
-}
-
-type AmberConfig struct {
-	Host  string `env:"AMBER_HOST"`
-	Token string `env:"AMBER_TOKEN"`
 }
 
 type AuthConfig struct {

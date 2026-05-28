@@ -10,35 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type Amberprice struct {
-	ID          int                `json:"id"`
-	PerKwh      float64            `json:"per_kwh"`
-	SpotPerKwh  float64            `json:"spot_per_kwh"`
-	StartTime   time.Time          `json:"start_time"`
-	EndTime     time.Time          `json:"end_time"`
-	Duration    int                `json:"duration"`
-	Forecast    bool               `json:"forecast"`
-	ChannelType string             `json:"channel_type"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-}
-
-type Amberusage struct {
-	ID                int                `json:"id"`
-	PerKwh            float64            `json:"per_kwh"`
-	SpotPerKwh        float64            `json:"spot_per_kwh"`
-	StartTime         time.Time          `json:"start_time"`
-	EndTime           time.Time          `json:"end_time"`
-	Duration          int                `json:"duration"`
-	ChannelType       string             `json:"channel_type"`
-	ChannelIdentifier string             `json:"channel_identifier"`
-	Kwh               float64            `json:"kwh"`
-	Quality           string             `json:"quality"`
-	Cost              float64            `json:"cost"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-}
-
 type Device struct {
 	ID           string             `json:"id"`
 	Model        pgtype.Text        `json:"model"`
