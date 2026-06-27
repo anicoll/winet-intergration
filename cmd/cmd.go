@@ -97,17 +97,24 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	defer cleanup()
 
-	mqttOpts := paho_mqtt.NewClientOptions()
-	mqttOpts.SetPassword(cfg.MqttCfg.Password)
-	mqttOpts.SetUsername(cfg.MqttCfg.Username)
-	mqttOpts.AddBroker(cfg.MqttCfg.Host)
+	publishers := []publisher.Publisher{db}
+	if cfg.MqttCfg.Host != "" {
+		mqttOpts := paho_mqtt.NewClientOptions()
+		mqttOpts.SetPassword(cfg.MqttCfg.Password)
+		mqttOpts.SetUsername(cfg.MqttCfg.Username)
+		mqttOpts.AddBroker(cfg.MqttCfg.Host)
 
-	mqttPublisher := mqtt.New(paho_mqtt.NewClient(mqttOpts))
-	if err := mqttPublisher.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to MQTT broker: %w", err)
+		mqttPublisher := mqtt.New(paho_mqtt.NewClient(mqttOpts))
+		if err := mqttPublisher.Connect(); err != nil {
+			return fmt.Errorf("failed to connect to MQTT broker: %w", err)
+		}
+		publishers = append(publishers, mqttPublisher)
+		logger.Info("Connected to MQTT broker", zap.String("host", cfg.MqttCfg.Host))
+	} else {
+		logger.Info("MQTT_HOST not set; MQTT publishing disabled")
 	}
 
-	pub := publisher.NewMultiPublisher(db, mqttPublisher)
+	pub := publisher.NewMultiPublisher(publishers...)
 
 	authSvc := auth.NewService(cfg.AuthCfg.JWTSecret, cfg.AuthCfg.AccessTokenTTL, cfg.AuthCfg.RefreshTokenTTL, db, db)
 	authSvc.StartCleanup(ctx, time.Hour)

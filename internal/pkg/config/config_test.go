@@ -91,6 +91,14 @@ func TestLoad_MissingDatabaseURL(t *testing.T) {
 	assert.Empty(t, cfg.DBDSN)
 }
 
+func TestLoad_WithoutMQTTHost(t *testing.T) {
+	setRequiredEnv(t)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Empty(t, cfg.MqttCfg.Host)
+}
+
 func TestLoad_CustomValues(t *testing.T) {
 	setRequiredEnv(t)
 	t.Setenv("LOG_LEVEL", "debug")
