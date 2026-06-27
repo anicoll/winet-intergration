@@ -1,0 +1,15 @@
+services:
+  winet:
+    build: .
+    container_name: winet-integration
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ORACLE_WALLET: /app/oci_wallet/wallet
+      MIGRATIONS_FOLDER: /app/migrations/oracle
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./oci_wallet/wallet:/app/oci_wallet/wallet:ro
+      - ./migrations:/app/migrations:ro
