@@ -14,5 +14,5 @@ COPY ./migrations  /app/migrations
 
 EXPOSE 8080
 
-ENTRYPOINT ["./main", "winet-controller"]
+ENTRYPOINT ["./main"]
 
