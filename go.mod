@@ -11,7 +11,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/gosimple/slug v1.15.0
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/oapi-codegen/oapi-codegen/v2 v2.7.2
+	github.com/oapi-codegen/oapi-codegen/v2 v2.8.0
 	github.com/oapi-codegen/runtime v1.6.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/samber/lo v1.53.0
@@ -47,9 +47,9 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
-	github.com/go-openapi/jsonpointer v0.22.5 // indirect
+	github.com/go-openapi/jsonpointer v0.23.1 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
-	github.com/go-openapi/swag/jsonname v0.25.5 // indirect
+	github.com/go-openapi/swag/jsonname v0.26.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gosimple/unidecode v1.0.1 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
@@ -86,7 +86,7 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.5 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/speakeasy-api/jsonpath v0.6.3 // indirect
-	github.com/speakeasy-api/openapi v1.19.2 // indirect
+	github.com/speakeasy-api/openapi v1.24.0 // indirect
 	github.com/speakeasy-api/openapi-overlay v0.10.2 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
@@ -102,11 +102,11 @@ require (
 	go.opentelemetry.io/otel/trace v1.41.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/mod v0.37.0 // indirect
-	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/mod v0.38.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
-	golang.org/x/tools v0.47.0 // indirect
+	golang.org/x/tools v0.48.0 // indirect
 	google.golang.org/grpc v1.79.1 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
