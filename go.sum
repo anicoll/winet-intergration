@@ -263,6 +263,8 @@ github.com/oapi-codegen/oapi-codegen/v2 v2.7.2 h1:EKgVTwbZKQHZh8+ZnU+5TLVv1kedWZ
 github.com/oapi-codegen/oapi-codegen/v2 v2.7.2/go.mod h1:qzFy6iuobJw/hD1aRILee4G87/ShmhR0xYCwcUtZMCw=
 github.com/oapi-codegen/oapi-codegen/v2 v2.8.0 h1:s4hxMxuqtR8jPzXkBTtFwY/SBuj3gEAYikmbBSdtLMM=
 github.com/oapi-codegen/oapi-codegen/v2 v2.8.0/go.mod h1:yae2TI9IYB5vxQ35gFrpXh9L5H1eJv4MAUK1jumGMTo=
+github.com/oapi-codegen/oapi-codegen/v2 v2.8.1 h1:7gjJwSzbXBUhTJFa6bd4ZpVXIF2Xjwei/Ni1LW4fztk=
+github.com/oapi-codegen/oapi-codegen/v2 v2.8.1/go.mod h1:yae2TI9IYB5vxQ35gFrpXh9L5H1eJv4MAUK1jumGMTo=
 github.com/oapi-codegen/runtime v1.3.1 h1:RgDY6J4OGQLbRXhG/Xpt3vSVqYpHQS7hN4m85+5xB9g=
 github.com/oapi-codegen/runtime v1.3.1/go.mod h1:kOdeacKy7t40Rclb1je37ZLFboFxh+YLy0zaPCMibPY=
 github.com/oapi-codegen/runtime v1.4.0 h1:KLOSFOp7UzkbS7Cs1ms6NBEKYr0WmH2wZG0KKbd2er4=
